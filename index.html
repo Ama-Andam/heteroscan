@@ -198,7 +198,7 @@ function pollStatus() {
 async function loadReport(taskId) {
   showProgress(`Loading analysis report for task #${taskId}...`);
   try {
-    const r = await fetch(`${API}/task/${taskId}/report`);
+    const r = await fetch(`${API}/task/${taskId}/report`, {headers:{'ngrok-skip-browser-warning':'1'}});
     const data = await r.json();
     showResults(data);
   } catch (e) {
