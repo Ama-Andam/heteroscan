@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MalwareHAN - Behavioral Malware Analysis</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0a0e1a; color: #e0e6f0; min-height: 100vh; }
+  .header { background: linear-gradient(135deg, #1a1f35 0%, #0d1117 100%); border-bottom: 1px solid #2d3561; padding: 20px 40px; display: flex; align-items: center; gap: 15px; }
+  .header-logo { font-size: 24px; font-weight: 700; color: #4f9eff; letter-spacing: 1px; }
+  .header-sub { font-size: 13px; color: #8892b0; }
+  .container { max-width: 1100px; margin: 40px auto; padding: 0 20px; }
+  .card { background: #141929; border: 1px solid #1e2744; border-radius: 12px; padding: 30px; margin-bottom: 24px; }
+  .card-title { font-size: 16px; font-weight: 600; color: #4f9eff; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1px; }
+  .upload-zone { border: 2px dashed #2d3561; border-radius: 8px; padding: 50px; text-align: center; cursor: pointer; transition: all 0.3s; }
+  .upload-zone:hover, .upload-zone.drag-over { border-color: #4f9eff; background: rgba(79,158,255,0.05); }
+  .upload-zone .icon { font-size: 48px; margin-bottom: 15px; }
+  .upload-zone p { color: #8892b0; margin-bottom: 10px; }
+  .btn { background: linear-gradient(135deg, #4f9eff, #2d6fd4); color: white; border: none; padding: 12px 28px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(79,158,255,0.4); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .verdict-box { border-radius: 10px; padding: 24px; text-align: center; margin-bottom: 24px; }
+  .verdict-malicious { background: linear-gradient(135deg, #2d1515, #1a0a0a); border: 2px solid #ff4f4f; }
+  .verdict-benign { background: linear-gradient(135deg, #0d2d15, #0a1a0d); border: 2px solid #4fff7f; }
+  .verdict-label { font-size: 36px; font-weight: 800; letter-spacing: 3px; margin-bottom: 8px; }
+  .verdict-malicious .verdict-label { color: #ff4f4f; }
+  .verdict-benign .verdict-label { color: #4fff7f; }
+  .confidence { font-size: 18px; color: #8892b0; }
+  .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 24px; }
+  .stat-box { background: #0d1117; border: 1px solid #1e2744; border-radius: 8px; padding: 16px; text-align: center; }
+  .stat-value { font-size: 28px; font-weight: 700; color: #4f9eff; }
+  .stat-label { font-size: 11px; color: #8892b0; margin-top: 4px; text-transform: uppercase; }
+  .hosts-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .host-tag { background: #1a1f35; border: 1px solid #ff4f4f; color: #ff8888; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-family: monospace; }
+  .explanation { background: #0d1117; border-radius: 8px; padding: 20px; line-height: 1.7; font-size: 14px; color: #c0c8d8; white-space: pre-wrap; }
+  .progress { background: #1e2744; border-radius: 4px; height: 6px; margin: 10px 0; overflow: hidden; }
+  .progress-bar { background: linear-gradient(90deg, #4f9eff, #7f5fff); height: 100%; border-radius: 4px; animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+  .status-msg { color: #8892b0; font-size: 14px; margin-top: 10px; }
+  .cape-badge { display: inline-block; background: #2d1535; border: 1px solid #9f4fff; color: #cf8fff; padding: 4px 14px; border-radius: 20px; font-size: 13px; margin-top: 8px; }
+  .process-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .process-tag { background: #1a2535; border: 1px solid #2d4561; color: #88a8c8; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-family: monospace; }
+  .hidden { display: none; }
+  .file-info { color: #4f9eff; font-weight: 600; margin-top: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 8px 12px; color: #8892b0; border-bottom: 1px solid #1e2744; }
+  td { padding: 8px 12px; border-bottom: 1px solid #0d1117; color: #c0c8d8; }
+  tr:last-child td { border-bottom: none; }
+  .demo-btn { background: #1a2535; border: 1px solid #2d4561; color: #88a8c8; padding: 8px 16px; border-radius: 6px; font-size: 12px; cursor: pointer; margin: 4px; }
+  .demo-btn:hover { border-color: #4f9eff; color: #4f9eff; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-logo">🔬 MalwareHAN</div>
+    <div class="header-sub">Heterogeneous Graph Neural Network + LLM Behavioral Analysis</div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Upload Card -->
+  <div class="card">
+    <div class="card-title">📁 Submit Sample for Analysis</div>
+    <div class="upload-zone" id="uploadZone">
+      <div class="icon">🛡️</div>
+      <p>Drag & drop a Windows executable here</p>
+      <p style="font-size:12px">or</p>
+      <input type="file" id="fileInput" style="display:none" accept=".exe,.dll,.bin">
+      <button class="btn" onclick="document.getElementById('fileInput').click()">Browse File</button>
+      <div class="file-info" id="fileInfo"></div>
+    </div>
+    <div style="margin-top:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+      <button class="btn" id="analyzeBtn" onclick="submitFile()" disabled>🔍 Analyze</button>
+      <span style="color:#8892b0; font-size:13px">or load a pre-analyzed example:</span>
+      <button class="demo-btn" onclick="loadReport(58)">njRAT Sample</button>
+      <button class="demo-btn" onclick="loadReport(51)">AsyncRAT Sample</button>
+      <button class="demo-btn" onclick="loadReport(41)">XWorm Sample</button>
+      <button class="demo-btn" onclick="loadReport(34)">RedLine Sample</button>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="card hidden" id="progressCard">
+    <div class="card-title">⏳ Analysis in Progress</div>
+    <div class="progress"><div class="progress-bar" style="width:100%"></div></div>
+    <div class="status-msg" id="statusMsg">Submitting to CAPE sandbox...</div>
+  </div>
+
+  <!-- Results -->
+  <div id="results" class="hidden">
+
+    <!-- Verdict -->
+    <div id="verdictBox" class="verdict-box">
+      <div class="verdict-label" id="verdictLabel">-</div>
+      <div class="confidence" id="confidenceLabel">-</div>
+      <div id="capeDetection"></div>
+    </div>
+
+    <!-- Graph Stats -->
+    <div class="card">
+      <div class="card-title">📊 Behavioral Graph Statistics</div>
+      <div class="stats-grid">
+        <div class="stat-box"><div class="stat-value" id="statProcesses">-</div><div class="stat-label">Processes</div></div>
+        <div class="stat-box"><div class="stat-value" id="statApi">-</div><div class="stat-label">API Calls</div></div>
+        <div class="stat-box"><div class="stat-value" id="statFiles">-</div><div class="stat-label">Files</div></div>
+        <div class="stat-box"><div class="stat-value" id="statReg">-</div><div class="stat-label">Registry Keys</div></div>
+        <div class="stat-box"><div class="stat-value" id="statNet">-</div><div class="stat-label">Network</div></div>
+      </div>
+    </div>
+
+    <!-- Processes -->
+    <div class="card" id="processCard">
+      <div class="card-title">⚙️ Spawned Processes</div>
+      <div class="process-list" id="processList"></div>
+    </div>
+
+    <!-- Network -->
+    <div class="card" id="networkCard">
+      <div class="card-title">🌐 Network Connections (C2 Candidates)</div>
+      <div class="hosts-list" id="hostsList"></div>
+    </div>
+
+    <!-- LLM Explanation -->
+    <div class="card">
+      <div class="card-title">🤖 AI-Generated Behavioral Analysis</div>
+      <div class="explanation" id="explanationText"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const API = 'http://127.0.0.1:5000';
+let selectedFile = null;
+let currentTaskId = null;
+let pollTimer = null;
+
+// Drag and drop
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => {
+  e.preventDefault();
+  zone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) setFile(file);
+});
+
+document.getElementById('fileInput').addEventListener('change', e => {
+  if (e.target.files[0]) setFile(e.target.files[0]);
+});
+
+function setFile(file) {
+  selectedFile = file;
+  document.getElementById('fileInfo').textContent = `Selected: ${file.name} (${(file.size/1024).toFixed(1)} KB)`;
+  document.getElementById('analyzeBtn').disabled = false;
+}
+
+async function submitFile() {
+  if (!selectedFile) return;
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+  showProgress('Submitting to CAPE sandbox...');
+  try {
+    const r = await fetch(`${API}/analyze`, { method: 'POST', body: formData });
+    const data = await r.json();
+    if (data.task_id) {
+      currentTaskId = data.task_id;
+      pollStatus();
+    }
+  } catch (e) {
+    document.getElementById('statusMsg').textContent = 'Error: ' + e.message;
+  }
+}
+
+function pollStatus() {
+  document.getElementById('statusMsg').textContent = `Task #${currentTaskId}: Running sandbox analysis...`;
+  pollTimer = setInterval(async () => {
+    try {
+      const r = await fetch(`${API}/task/${currentTaskId}/status`);
+      const data = await r.json();
+      document.getElementById('statusMsg').textContent = `Task #${currentTaskId}: ${data.status}...`;
+      if (data.status === 'reported') {
+        clearInterval(pollTimer);
+        loadReport(currentTaskId);
+      } else if (data.status.includes('failed')) {
+        clearInterval(pollTimer);
+        document.getElementById('statusMsg').textContent = 'Analysis failed: ' + data.status;
+      }
+    } catch (e) {}
+  }, 5000);
+}
+
+async function loadReport(taskId) {
+  showProgress(`Loading analysis report for task #${taskId}...`);
+  try {
+    const r = await fetch(`${API}/task/${taskId}/report`);
+    const data = await r.json();
+    showResults(data);
+  } catch (e) {
+    document.getElementById('statusMsg').textContent = 'Error loading report: ' + e.message;
+  }
+}
+
+function showProgress(msg) {
+  document.getElementById('progressCard').classList.remove('hidden');
+  document.getElementById('results').classList.add('hidden');
+  document.getElementById('statusMsg').textContent = msg;
+}
+
+function showResults(data) {
+  document.getElementById('progressCard').classList.add('hidden');
+  document.getElementById('results').classList.remove('hidden');
+
+  // Verdict
+  const isMalicious = data.verdict === 'MALICIOUS';
+  const verdictBox = document.getElementById('verdictBox');
+  verdictBox.className = 'verdict-box ' + (isMalicious ? 'verdict-malicious' : 'verdict-benign');
+  document.getElementById('verdictLabel').textContent = data.verdict;
+  document.getElementById('confidenceLabel').textContent = `Confidence: ${data.confidence}%`;
+
+  if (data.cape_detection) {
+    document.getElementById('capeDetection').innerHTML = `<span class="cape-badge">CAPE: ${data.cape_detection}</span>`;
+  } else {
+    document.getElementById('capeDetection').innerHTML = '';
+  }
+
+  // Stats
+  const gs = data.graph_stats;
+  document.getElementById('statProcesses').textContent = gs.processes;
+  document.getElementById('statApi').textContent = gs.api_calls;
+  document.getElementById('statFiles').textContent = gs.files;
+  document.getElementById('statReg').textContent = gs.registry_keys;
+  document.getElementById('statNet').textContent = gs.network_connections;
+
+  // Processes
+  const plist = document.getElementById('processList');
+  plist.innerHTML = '';
+  if (data.process_names && data.process_names.length) {
+    data.process_names.forEach(p => {
+      const tag = document.createElement('span');
+      tag.className = 'process-tag';
+      tag.textContent = p.replace(/^\d+_/, '');
+      plist.appendChild(tag);
+    });
+    document.getElementById('processCard').classList.remove('hidden');
+  } else {
+    document.getElementById('processCard').classList.add('hidden');
+  }
+
+  // Network hosts
+  const hlist = document.getElementById('hostsList');
+  hlist.innerHTML = '';
+  if (data.network_hosts && data.network_hosts.length) {
+    data.network_hosts.forEach(h => {
+      const tag = document.createElement('span');
+      tag.className = 'host-tag';
+      tag.textContent = h;
+      hlist.appendChild(tag);
+    });
+    document.getElementById('networkCard').classList.remove('hidden');
+  } else {
+    document.getElementById('networkCard').classList.add('hidden');
+  }
+
+  // LLM Explanation
+  document.getElementById('explanationText').textContent = data.explanation;
+
+  // Scroll to results
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+}
+</script>
+</body>
+</html>
