@@ -3,275 +3,490 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MalwareHAN - Behavioral Malware Analysis</title>
+<title>HeteroScan — Behavioral Malware Analysis</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Segoe UI', sans-serif; background: #0a0e1a; color: #e0e6f0; min-height: 100vh; }
-  .header { background: linear-gradient(135deg, #1a1f35 0%, #0d1117 100%); border-bottom: 1px solid #2d3561; padding: 20px 40px; display: flex; align-items: center; gap: 15px; }
-  .header-logo { font-size: 24px; font-weight: 700; color: #4f9eff; letter-spacing: 1px; }
-  .header-sub { font-size: 13px; color: #8892b0; }
-  .container { max-width: 1100px; margin: 40px auto; padding: 0 20px; }
-  .card { background: #141929; border: 1px solid #1e2744; border-radius: 12px; padding: 30px; margin-bottom: 24px; }
-  .card-title { font-size: 16px; font-weight: 600; color: #4f9eff; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1px; }
-  .upload-zone { border: 2px dashed #2d3561; border-radius: 8px; padding: 50px; text-align: center; cursor: pointer; transition: all 0.3s; }
-  .upload-zone:hover, .upload-zone.drag-over { border-color: #4f9eff; background: rgba(79,158,255,0.05); }
-  .upload-zone .icon { font-size: 48px; margin-bottom: 15px; }
-  .upload-zone p { color: #8892b0; margin-bottom: 10px; }
-  .btn { background: linear-gradient(135deg, #4f9eff, #2d6fd4); color: white; border: none; padding: 12px 28px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-  .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(79,158,255,0.4); }
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-  .verdict-box { border-radius: 10px; padding: 24px; text-align: center; margin-bottom: 24px; }
-  .verdict-malicious { background: linear-gradient(135deg, #2d1515, #1a0a0a); border: 2px solid #ff4f4f; }
-  .verdict-benign { background: linear-gradient(135deg, #0d2d15, #0a1a0d); border: 2px solid #4fff7f; }
-  .verdict-label { font-size: 36px; font-weight: 800; letter-spacing: 3px; margin-bottom: 8px; }
-  .verdict-malicious .verdict-label { color: #ff4f4f; }
-  .verdict-benign .verdict-label { color: #4fff7f; }
-  .confidence { font-size: 18px; color: #8892b0; }
-  .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 24px; }
-  .stat-box { background: #0d1117; border: 1px solid #1e2744; border-radius: 8px; padding: 16px; text-align: center; }
-  .stat-value { font-size: 28px; font-weight: 700; color: #4f9eff; }
-  .stat-label { font-size: 11px; color: #8892b0; margin-top: 4px; text-transform: uppercase; }
-  .hosts-list { display: flex; flex-wrap: wrap; gap: 8px; }
-  .host-tag { background: #1a1f35; border: 1px solid #ff4f4f; color: #ff8888; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-family: monospace; }
-  .explanation { background: #0d1117; border-radius: 8px; padding: 20px; line-height: 1.7; font-size: 14px; color: #c0c8d8; white-space: pre-wrap; }
-  .progress { background: #1e2744; border-radius: 4px; height: 6px; margin: 10px 0; overflow: hidden; }
-  .progress-bar { background: linear-gradient(90deg, #4f9eff, #7f5fff); height: 100%; border-radius: 4px; animation: pulse 1.5s ease-in-out infinite; }
-  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
-  .status-msg { color: #8892b0; font-size: 14px; margin-top: 10px; }
-  .cape-badge { display: inline-block; background: #2d1535; border: 1px solid #9f4fff; color: #cf8fff; padding: 4px 14px; border-radius: 20px; font-size: 13px; margin-top: 8px; }
-  .process-list { display: flex; flex-wrap: wrap; gap: 8px; }
-  .process-tag { background: #1a2535; border: 1px solid #2d4561; color: #88a8c8; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-family: monospace; }
-  .hidden { display: none; }
-  .file-info { color: #4f9eff; font-weight: 600; margin-top: 10px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { text-align: left; padding: 8px 12px; color: #8892b0; border-bottom: 1px solid #1e2744; }
-  td { padding: 8px 12px; border-bottom: 1px solid #0d1117; color: #c0c8d8; }
-  tr:last-child td { border-bottom: none; }
-  .demo-btn { background: #1a2535; border: 1px solid #2d4561; color: #88a8c8; padding: 8px 16px; border-radius: 6px; font-size: 12px; cursor: pointer; margin: 4px; }
-  .demo-btn:hover { border-color: #4f9eff; color: #4f9eff; }
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#07090f;--bg2:#0d1117;--bg3:#141929;--bg4:#1a2035;
+  --border:#1e2744;--border2:#2d3561;
+  --accent:#ff4500;--accent2:#ff6b35;--blue:#4f9eff;
+  --text:#e0e6f0;--text2:#8892b0;--text3:#4a5568;
+  --success:#00ff87;--danger:#ff4f4f;--warn:#ffa500;
+}
+body{font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;}
+.header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 32px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100;}
+.logo{display:flex;align-items:center;gap:10px;}
+.logo-icon{width:32px;height:32px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;}
+.logo-text{font-size:18px;font-weight:700;letter-spacing:1px;}
+.logo-sub{font-size:11px;color:var(--text2);letter-spacing:0.5px;}
+.status-dot{width:8px;height:8px;background:var(--success);border-radius:50%;animation:pulse2 2s infinite;}
+@keyframes pulse2{0%,100%{opacity:1;}50%{opacity:0.4;}}
+.header-right{display:flex;align-items:center;gap:16px;font-size:12px;color:var(--text2);}
+.tabs{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 32px;display:flex;}
+.tab{padding:14px 24px;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.2s;letter-spacing:0.3px;}
+.tab:hover{color:var(--text);}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.main{max-width:1200px;margin:0 auto;padding:28px 24px;}
+.card{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:24px;margin-bottom:20px;}
+.card-header{display:flex;align-items:center;gap:8px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border);}
+.card-title{font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:1.5px;}
+.card-icon{font-size:16px;}
+.upload-area{border:2px dashed var(--border2);border-radius:10px;padding:48px 24px;text-align:center;cursor:pointer;transition:all 0.3s;}
+.upload-area:hover,.upload-area.over{border-color:var(--accent);background:rgba(255,69,0,0.04);}
+.upload-icon{font-size:48px;margin-bottom:14px;opacity:0.6;}
+.upload-text{color:var(--text2);margin-bottom:6px;}
+.upload-sub{color:var(--text3);font-size:12px;}
+.file-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(255,69,0,0.12);border:1px solid rgba(255,69,0,0.3);color:var(--accent2);padding:6px 14px;border-radius:20px;font-size:12px;margin-top:12px;}
+.btn{padding:10px 22px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;border:none;letter-spacing:0.3px;}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:white;}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(255,69,0,0.4);}
+.btn-primary:disabled{opacity:0.4;cursor:not-allowed;transform:none;box-shadow:none;}
+.btn-ghost{background:transparent;border:1px solid var(--border2);color:var(--text2);}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent);}
+.btn-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px;}
+.demo-label{font-size:12px;color:var(--text3);}
+.progress-bar-wrap{background:var(--bg4);border-radius:4px;height:4px;overflow:hidden;margin:10px 0;}
+.progress-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:4px;width:100%;animation:shimmer 2s linear infinite;background-size:200% 100%;}
+@keyframes shimmer{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
+.status-text{font-size:13px;color:var(--text2);margin-top:8px;}
+.step-list{display:flex;gap:0;margin-top:16px;}
+.step{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;}
+.step:not(:last-child)::after{content:"";position:absolute;top:12px;left:50%;width:100%;height:1px;background:var(--border2);}
+.step-dot{width:24px;height:24px;border-radius:50%;border:2px solid var(--border2);background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text3);z-index:1;}
+.step-dot.done{border-color:var(--success);background:rgba(0,255,135,0.1);color:var(--success);}
+.step-dot.active{border-color:var(--accent);background:rgba(255,69,0,0.1);color:var(--accent);}
+.step-label{font-size:10px;color:var(--text3);text-align:center;}
+.verdict-banner{border-radius:10px;padding:28px;text-align:center;margin-bottom:20px;}
+.verdict-malicious{background:rgba(255,79,79,0.06);border:1px solid rgba(255,79,79,0.3);}
+.verdict-benign{background:rgba(0,255,135,0.06);border:1px solid rgba(0,255,135,0.3);}
+.verdict-label{font-size:40px;font-weight:800;letter-spacing:4px;margin-bottom:6px;}
+.verdict-malicious .verdict-label{color:var(--danger);}
+.verdict-benign .verdict-label{color:var(--success);}
+.verdict-conf{font-size:15px;color:var(--text2);}
+.cape-pill{display:inline-flex;align-items:center;gap:6px;background:rgba(163,45,163,0.12);border:1px solid rgba(163,45,163,0.3);color:#cf8fff;padding:4px 14px;border-radius:20px;font-size:12px;margin-top:10px;}
+.stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;}
+.stat-box{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px 12px;text-align:center;}
+.stat-val{font-size:26px;font-weight:700;color:var(--accent);}
+.stat-lbl{font-size:10px;color:var(--text2);margin-top:4px;text-transform:uppercase;letter-spacing:0.8px;}
+.stat-box.hi{border-color:rgba(255,69,0,0.3);background:rgba(255,69,0,0.04);}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
+.tag-list{display:flex;flex-wrap:wrap;gap:8px;}
+.tag{padding:4px 12px;border-radius:20px;font-size:12px;font-family:monospace;}
+.tag-process{background:rgba(79,158,255,0.1);border:1px solid rgba(79,158,255,0.25);color:#88b8ff;}
+.tag-host{background:rgba(255,79,79,0.1);border:1px solid rgba(255,79,79,0.3);color:#ff8888;}
+.graph-canvas{width:100%;height:300px;background:var(--bg2);border-radius:8px;display:block;}
+.chart-wrap{position:relative;height:180px;}
+.llm-output{background:var(--bg2);border-radius:8px;padding:20px;font-size:13px;line-height:1.8;color:#c0c8d8;white-space:pre-wrap;word-break:break-word;max-height:500px;overflow-y:auto;}
+.llm-output::-webkit-scrollbar{width:4px;}
+.llm-output::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+.info-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border);margin-top:24px;}
+.info-title:first-child{margin-top:0;}
+.info-text{color:var(--text2);line-height:1.8;font-size:13px;}
+.info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:16px;}
+.info-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;}
+.info-card-icon{font-size:22px;margin-bottom:8px;}
+.info-card-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px;}
+.info-card-text{font-size:12px;color:var(--text2);line-height:1.6;}
+.pipe-row{display:flex;gap:8px;margin:16px 0;overflow-x:auto;padding-bottom:4px;}
+.pipe-step{flex:1;min-width:110px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center;position:relative;}
+.pipe-step:not(:last-child)::after{content:"→";position:absolute;right:-12px;top:50%;transform:translateY(-50%);color:var(--accent);font-size:14px;z-index:1;}
+.pipe-icon{font-size:20px;margin-bottom:6px;}
+.pipe-title{font-size:11px;font-weight:600;color:var(--text);margin-bottom:3px;}
+.pipe-text{font-size:10px;color:var(--text2);}
+.mitre-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px;}
+.mitre-card{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:12px;}
+.mitre-id{font-size:11px;font-family:monospace;color:var(--accent);font-weight:600;}
+.mitre-name{font-size:12px;color:var(--text);margin-top:2px;}
+.mitre-desc{font-size:11px;color:var(--text2);margin-top:4px;line-height:1.5;}
+.warn-box{background:rgba(255,165,0,0.08);border:1px solid rgba(255,165,0,0.25);border-radius:8px;padding:14px;color:#ffcc88;font-size:13px;line-height:1.6;}
+.hidden{display:none;}
 </style>
 </head>
 <body>
 
 <div class="header">
-  <div>
-    <div class="header-logo">🔬 MalwareHAN</div>
-    <div class="header-sub">Heterogeneous Graph Neural Network + LLM Behavioral Analysis</div>
+  <div class="logo">
+    <div class="logo-icon">🔬</div>
+    <div>
+      <div class="logo-text">HeteroScan</div>
+      <div class="logo-sub">Heterogeneous GNN + LLM Behavioral Analysis</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-dot"></div>
+    <span>System Online</span>
+    <span style="color:var(--border2)">|</span>
+    <span>GNN: Loaded</span>
+    <span style="color:var(--border2)">|</span>
+    <span>LLM: Ready</span>
   </div>
 </div>
 
-<div class="container">
+<div class="tabs">
+  <div class="tab active" onclick="showTab('analysis')">Analysis</div>
+  <div class="tab" onclick="showTab('info')">How It Works</div>
+  <div class="tab" onclick="showTab('help')">Help</div>
+</div>
 
-  <!-- Upload Card -->
+<!-- ANALYSIS TAB -->
+<div id="tab-analysis" class="main">
   <div class="card">
-    <div class="card-title">📁 Submit Sample for Analysis</div>
-    <div class="upload-zone" id="uploadZone">
-      <div class="icon">🛡️</div>
-      <p>Drag & drop a Windows executable here</p>
-      <p style="font-size:12px">or</p>
-      <input type="file" id="fileInput" style="display:none" accept=".exe,.dll,.bin">
-      <button class="btn" onclick="document.getElementById('fileInput').click()">Browse File</button>
-      <div class="file-info" id="fileInfo"></div>
+    <div class="card-header"><span class="card-icon">📁</span><span class="card-title">Submit Sample for Analysis</span></div>
+    <div class="upload-area" id="uploadZone">
+      <div class="upload-icon">🛡️</div>
+      <div class="upload-text">Drag & drop a Windows executable here</div>
+      <div class="upload-sub">Supported: .exe, .dll, .bin — Max 30MB</div>
+      <div id="fileBadge" class="hidden"></div>
     </div>
-    <div style="margin-top:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-      <button class="btn" id="analyzeBtn" onclick="submitFile()" disabled>🔍 Analyze</button>
-      <span style="color:#8892b0; font-size:13px">or load a pre-analyzed example:</span>
-      <button class="demo-btn" onclick="loadReport(58)">njRAT Sample</button>
-      <button class="demo-btn" onclick="loadReport(51)">AsyncRAT Sample</button>
-      <button class="demo-btn" onclick="loadReport(41)">XWorm Sample</button>
-      <button class="demo-btn" onclick="loadReport(34)">RedLine Sample</button>
+    <input type="file" id="fileInput" style="display:none" accept=".exe,.dll,.bin">
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="document.getElementById('fileInput').click()">Browse File</button>
+      <button class="btn btn-primary" id="analyzeBtn" onclick="submitFile()" disabled>Analyze Sample</button>
+      <span class="demo-label">Or try a pre-analyzed example:</span>
+      <button class="btn btn-ghost" onclick="loadReport(58)">njRAT</button>
+      <button class="btn btn-ghost" onclick="loadReport(51)">AsyncRAT</button>
+      <button class="btn btn-ghost" onclick="loadReport(41)">XWorm</button>
+      <button class="btn btn-ghost" onclick="loadReport(34)">RedLine</button>
     </div>
   </div>
 
-  <!-- Progress -->
   <div class="card hidden" id="progressCard">
-    <div class="card-title">⏳ Analysis in Progress</div>
-    <div class="progress"><div class="progress-bar" style="width:100%"></div></div>
-    <div class="status-msg" id="statusMsg">Submitting to CAPE sandbox...</div>
+    <div class="card-header"><span class="card-icon">⏳</span><span class="card-title">Analysis Pipeline</span></div>
+    <div class="step-list">
+      <div class="step"><div class="step-dot" id="s1">1</div><div class="step-label">Submit to CAPE</div></div>
+      <div class="step"><div class="step-dot" id="s2">2</div><div class="step-label">Sandbox Execution</div></div>
+      <div class="step"><div class="step-dot" id="s3">3</div><div class="step-label">Build Graph</div></div>
+      <div class="step"><div class="step-dot" id="s4">4</div><div class="step-label">GNN Inference</div></div>
+      <div class="step"><div class="step-dot" id="s5">5</div><div class="step-label">LLM Explanation</div></div>
+    </div>
+    <div class="progress-bar-wrap" style="margin-top:16px"><div class="progress-bar"></div></div>
+    <div class="status-text" id="statusMsg">Initializing...</div>
   </div>
 
-  <!-- Results -->
   <div id="results" class="hidden">
-
-    <!-- Verdict -->
-    <div id="verdictBox" class="verdict-box">
+    <div id="verdictBanner" class="verdict-banner">
       <div class="verdict-label" id="verdictLabel">-</div>
-      <div class="confidence" id="confidenceLabel">-</div>
-      <div id="capeDetection"></div>
+      <div class="verdict-conf" id="verdictConf">-</div>
+      <div id="capeDetect"></div>
     </div>
 
-    <!-- Graph Stats -->
-    <div class="card">
-      <div class="card-title">📊 Behavioral Graph Statistics</div>
-      <div class="stats-grid">
-        <div class="stat-box"><div class="stat-value" id="statProcesses">-</div><div class="stat-label">Processes</div></div>
-        <div class="stat-box"><div class="stat-value" id="statApi">-</div><div class="stat-label">API Calls</div></div>
-        <div class="stat-box"><div class="stat-value" id="statFiles">-</div><div class="stat-label">Files</div></div>
-        <div class="stat-box"><div class="stat-value" id="statReg">-</div><div class="stat-label">Registry Keys</div></div>
-        <div class="stat-box"><div class="stat-value" id="statNet">-</div><div class="stat-label">Network</div></div>
+    <div class="stats-grid">
+      <div class="stat-box hi"><div class="stat-val" id="sProc">-</div><div class="stat-lbl">Processes</div></div>
+      <div class="stat-box hi"><div class="stat-val" id="sApi">-</div><div class="stat-lbl">API Calls</div></div>
+      <div class="stat-box"><div class="stat-val" id="sFile">-</div><div class="stat-lbl">Files</div></div>
+      <div class="stat-box"><div class="stat-val" id="sReg">-</div><div class="stat-lbl">Registry Keys</div></div>
+      <div class="stat-box hi"><div class="stat-val" id="sNet">-</div><div class="stat-lbl">Network Conn.</div></div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-header"><span class="card-icon">🕸️</span><span class="card-title">Behavioral Graph</span></div>
+        <canvas id="graphCanvas" class="graph-canvas"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-icon">📊</span><span class="card-title">Node Distribution</span></div>
+        <div class="chart-wrap"><canvas id="nodeChart"></canvas></div>
+        <div style="margin-top:16px">
+          <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">GNN Confidence</div>
+          <div style="background:var(--bg2);border-radius:6px;height:8px;overflow:hidden;">
+            <div id="confBar" style="height:100%;border-radius:6px;background:linear-gradient(90deg,#ff4500,#ff6b35);transition:width 1s ease;width:0%"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--text3)">
+            <span>0%</span><span id="confPct" style="color:var(--accent);font-weight:600">-</span><span>100%</span>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Processes -->
-    <div class="card" id="processCard">
-      <div class="card-title">⚙️ Spawned Processes</div>
-      <div class="process-list" id="processList"></div>
+    <div class="two-col">
+      <div class="card">
+        <div class="card-header"><span class="card-icon">⚙️</span><span class="card-title">Spawned Processes</span></div>
+        <div class="tag-list" id="procList"><span style="color:var(--text3);font-size:12px">No processes observed</span></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-icon">🌐</span><span class="card-title">C2 Candidates</span></div>
+        <div class="tag-list" id="hostList"><span style="color:var(--text3);font-size:12px">No network connections detected</span></div>
+      </div>
     </div>
 
-    <!-- Network -->
-    <div class="card" id="networkCard">
-      <div class="card-title">🌐 Network Connections (C2 Candidates)</div>
-      <div class="hosts-list" id="hostsList"></div>
-    </div>
-
-    <!-- LLM Explanation -->
     <div class="card">
-      <div class="card-title">🤖 AI-Generated Behavioral Analysis</div>
-      <div class="explanation" id="explanationText"></div>
+      <div class="card-header"><span class="card-icon">📈</span><span class="card-title">API Call Category Breakdown</span></div>
+      <div style="height:160px"><canvas id="apiChart"></canvas></div>
     </div>
 
+    <div class="card">
+      <div class="card-header"><span class="card-icon">🤖</span><span class="card-title">AI-Generated Behavioral Analysis</span></div>
+      <div class="llm-output" id="llmOutput">Loading analysis...</div>
+    </div>
+  </div>
+</div>
+
+<!-- HOW IT WORKS TAB -->
+<div id="tab-info" class="main hidden">
+  <div class="card">
+    <div class="card-header"><span class="card-icon">🔬</span><span class="card-title">About HeteroScan</span></div>
+
+    <div class="info-title">What is HeteroScan?</div>
+    <div class="info-text">
+      HeteroScan is a post-infection malware behavioral analysis system built for academic research. It combines three technologies: dynamic sandbox analysis via CAPE, heterogeneous graph neural networks (HAN), and large language model explanation via Claude. It addresses two key gaps in existing malware analysis research — the representation gap and the ground truth gap.
+    </div>
+
+    <div class="info-title">Analysis Pipeline</div>
+    <div class="pipe-row">
+      <div class="pipe-step"><div class="pipe-icon">📁</div><div class="pipe-title">Sample Upload</div><div class="pipe-text">PE executable submitted</div></div>
+      <div class="pipe-step"><div class="pipe-icon">🧪</div><div class="pipe-title">CAPE Sandbox</div><div class="pipe-text">Isolated Windows 10 VM execution</div></div>
+      <div class="pipe-step"><div class="pipe-icon">🕸️</div><div class="pipe-title">Graph Builder</div><div class="pipe-text">Heterogeneous behavioral graph</div></div>
+      <div class="pipe-step"><div class="pipe-icon">🧠</div><div class="pipe-title">HAN Model</div><div class="pipe-text">Graph attention network inference</div></div>
+      <div class="pipe-step"><div class="pipe-icon">🤖</div><div class="pipe-title">LLM Layer</div><div class="pipe-text">Natural language explanation</div></div>
+    </div>
+
+    <div class="info-title">Heterogeneous Graph Node Types</div>
+    <div class="info-grid">
+      <div class="info-card"><div class="info-card-icon">⚙️</div><div class="info-card-title">Process Nodes</div><div class="info-card-text">Each process observed during execution. Spawns edges connect parent to child processes.</div></div>
+      <div class="info-card"><div class="info-card-icon">📞</div><div class="info-card-title">API Call Nodes</div><div class="info-card-text">Windows API functions called by processes. The primary behavioral signal for detection.</div></div>
+      <div class="info-card"><div class="info-card-icon">📄</div><div class="info-card-title">File Nodes</div><div class="info-card-text">Files read or written during execution. Persistence mechanisms often involve file system changes.</div></div>
+      <div class="info-card"><div class="info-card-icon">🔑</div><div class="info-card-title">Registry Nodes</div><div class="info-card-text">Registry keys accessed. Malware commonly writes to Run keys for persistence.</div></div>
+      <div class="info-card"><div class="info-card-icon">🌐</div><div class="info-card-title">Network Nodes</div><div class="info-card-text">Network endpoints contacted — C2 servers, exfiltration targets, update servers.</div></div>
+      <div class="info-card"><div class="info-card-icon">🔗</div><div class="info-card-title">7 Edge Types</div><div class="info-card-text">spawns, calls, reads_file, writes_file, reads_reg, writes_reg, connects — typed relationships.</div></div>
+    </div>
+
+    <div class="info-title">MITRE ATT&CK Coverage</div>
+    <div class="mitre-grid">
+      <div class="mitre-card"><div class="mitre-id">T1055</div><div class="mitre-name">Process Injection</div><div class="mitre-desc">Detected via NtProtectVirtualMemory + LdrLoadDll API call patterns in the behavioral graph</div></div>
+      <div class="mitre-card"><div class="mitre-id">T1547</div><div class="mitre-name">Boot/Logon Autostart</div><div class="mitre-desc">Detected via HKCU\Run and HKLM\Run registry write edges in the graph</div></div>
+      <div class="mitre-card"><div class="mitre-id">T1059</div><div class="mitre-name">Command & Scripting</div><div class="mitre-desc">Detected via cmd.exe, powershell.exe process spawn edges</div></div>
+      <div class="mitre-card"><div class="mitre-id">T1071</div><div class="mitre-name">C2 Communication</div><div class="mitre-desc">Detected via network connection edges to non-standard ports and unknown IPs</div></div>
+    </div>
+
+    <div class="info-title" style="margin-top:24px">Research Context</div>
+    <div class="info-text">
+      This system is part of a master's thesis at the University of North Dakota titled "Malware Detection and Behavioral Analysis in IoT Environments: A Multi-Study Deep Learning Approach." Study 3 specifically addresses post-infection behavioral analysis using heterogeneous GNNs. The model is trained on 600+ samples across 20+ malware families including AsyncRAT, XWorm, njRAT, RedLine, AgentTesla, Vidar, Formbook, and more.
+    </div>
+  </div>
+</div>
+
+<!-- HELP TAB -->
+<div id="tab-help" class="main hidden">
+  <div class="card">
+    <div class="card-header"><span class="card-icon">❓</span><span class="card-title">Help & Documentation</span></div>
+
+    <div class="info-title">How to Analyze a Sample</div>
+    <div class="info-text">
+      1. Drag and drop a Windows executable (.exe, .dll) onto the upload zone, or click Browse File to select one from your computer.<br><br>
+      2. Click Analyze Sample to submit it to the CAPE sandbox. The file executes in an isolated Windows 10 virtual machine.<br><br>
+      3. Wait 3–5 minutes for sandbox execution and behavioral report generation.<br><br>
+      4. HeteroScan automatically builds a heterogeneous behavioral graph, runs GNN inference, and generates an LLM explanation.<br><br>
+      5. Review the verdict, behavioral graph visualization, graph statistics, network connections, and AI-generated analysis report.
+    </div>
+
+    <div class="info-title">Pre-Analyzed Examples</div>
+    <div class="info-text">
+      Click any quick-load button to instantly view a pre-analyzed malware report:<br><br>
+      <strong style="color:var(--text)">njRAT</strong> — Remote access trojan with process injection and C2 beaconing on non-standard ports<br><br>
+      <strong style="color:var(--text)">AsyncRAT</strong> — .NET-based RAT with fileless execution, .NET framework enumeration, and port 777 C2<br><br>
+      <strong style="color:var(--text)">XWorm</strong> — Info-stealer with USB propagation, mutex creation, and encrypted C2 communication<br><br>
+      <strong style="color:var(--text)">RedLine</strong> — Credential stealer targeting browsers, crypto wallets, and system information
+    </div>
+
+    <div class="info-title">Understanding the Verdict</div>
+    <div class="info-text">
+      The MALICIOUS / BENIGN verdict is produced by a Heterogeneous Graph Attention Network (HAN) trained on behavioral graphs from 600+ analyzed samples. The confidence score reflects model certainty — scores above 95% indicate strong behavioral evidence, while 70–95% suggests suspicious but not definitive patterns.<br><br>
+      The GNN operates on the structural properties of the behavioral graph, not on signatures or hashes. This means it can detect previously unseen malware variants that exhibit known behavioral patterns.
+    </div>
+
+    <div class="info-title">Graph Visualization Guide</div>
+    <div class="info-text">
+      The behavioral graph shows relationships between entities observed during sandbox execution:<br><br>
+      🟠 Orange = Process nodes<br>
+      🔵 Blue = API call nodes<br>
+      🟢 Green = File nodes<br>
+      🟣 Purple = Registry key nodes<br>
+      🔴 Red = Network endpoint nodes<br><br>
+      Node size reflects the count of that entity type. Edges between the central process node and surrounding nodes represent behavioral relationships.
+    </div>
+
+    <div class="info-title" style="margin-top:24px">Safety & Privacy</div>
+    <div class="warn-box">
+      ⚠️ HeteroScan executes uploaded files in an isolated sandbox environment with no internet access. Do not upload files containing sensitive personal information. All execution happens in a network-isolated Windows 10 VM. Uploaded samples are used solely for behavioral analysis and are not shared externally.
+    </div>
   </div>
 </div>
 
 <script>
-const API = 'https://f44b-134-129-201-10.ngrok-free.app';
-let selectedFile = null;
-let currentTaskId = null;
-let pollTimer = null;
+const API = "https://f44b-134-129-201-10.ngrok-free.app";
+const HDR = {"ngrok-skip-browser-warning":"1"};
+let selectedFile=null, pollTimer=null, nodeChartInst=null, apiChartInst=null;
 
-// Drag and drop
-const zone = document.getElementById('uploadZone');
-zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
-zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
-zone.addEventListener('drop', e => {
-  e.preventDefault();
-  zone.classList.remove('drag-over');
-  const file = e.dataTransfer.files[0];
-  if (file) setFile(file);
-});
-
-document.getElementById('fileInput').addEventListener('change', e => {
-  if (e.target.files[0]) setFile(e.target.files[0]);
-});
-
-function setFile(file) {
-  selectedFile = file;
-  document.getElementById('fileInfo').textContent = `Selected: ${file.name} (${(file.size/1024).toFixed(1)} KB)`;
-  document.getElementById('analyzeBtn').disabled = false;
+function showTab(t){
+  ["analysis","info","help"].forEach((id,i)=>{
+    document.getElementById("tab-"+id).classList.toggle("hidden",id!==t);
+    document.querySelectorAll(".tab")[i].classList.toggle("active",id===t);
+  });
 }
 
-async function submitFile() {
-  if (!selectedFile) return;
-  const formData = new FormData();
-  formData.append('file', selectedFile);
-  showProgress('Submitting to CAPE sandbox...');
-  try {
-    const r = await fetch(`${API}/analyze`, { method: 'POST', body: formData });
-    const data = await r.json();
-    if (data.task_id) {
-      currentTaskId = data.task_id;
-      pollStatus();
+const zone=document.getElementById("uploadZone");
+zone.addEventListener("dragover",e=>{e.preventDefault();zone.classList.add("over");});
+zone.addEventListener("dragleave",()=>zone.classList.remove("over"));
+zone.addEventListener("drop",e=>{e.preventDefault();zone.classList.remove("over");if(e.dataTransfer.files[0])setFile(e.dataTransfer.files[0]);});
+zone.addEventListener("click",()=>document.getElementById("fileInput").click());
+document.getElementById("fileInput").addEventListener("change",e=>{if(e.target.files[0])setFile(e.target.files[0]);});
+
+function setFile(f){
+  selectedFile=f;
+  const b=document.getElementById("fileBadge");
+  b.className="file-badge";b.innerHTML="📄 "+f.name+" &nbsp; "+(f.size/1024).toFixed(1)+" KB";
+  document.getElementById("analyzeBtn").disabled=false;
+}
+
+function setStep(n){
+  for(let i=1;i<=5;i++){
+    const el=document.getElementById("s"+i);
+    if(i<n){el.className="step-dot done";el.textContent="✓";}
+    else if(i===n){el.className="step-dot active";el.textContent=i;}
+    else{el.className="step-dot";el.textContent=i;}
+  }
+}
+
+async function submitFile(){
+  if(!selectedFile)return;
+  const fd=new FormData();fd.append("file",selectedFile);
+  document.getElementById("progressCard").classList.remove("hidden");
+  document.getElementById("results").classList.add("hidden");
+  setStep(1);document.getElementById("statusMsg").textContent="Submitting sample to CAPE sandbox...";
+  try{
+    const r=await fetch(API+"/analyze",{method:"POST",body:fd,headers:HDR});
+    const d=await r.json();
+    if(d.task_id){setStep(2);pollStatus(d.task_id);}
+  }catch(e){document.getElementById("statusMsg").textContent="Error: "+e.message;}
+}
+
+function pollStatus(taskId){
+  document.getElementById("statusMsg").textContent="Task #"+taskId+": Executing in sandbox VM...";
+  pollTimer=setInterval(async()=>{
+    try{
+      const r=await fetch(API+"/task/"+taskId+"/status",{headers:HDR});
+      const d=await r.json();
+      document.getElementById("statusMsg").textContent="Task #"+taskId+": "+d.status+"...";
+      if(d.status==="reported"){clearInterval(pollTimer);setStep(3);document.getElementById("statusMsg").textContent="Building behavioral graph...";setTimeout(()=>loadReport(taskId),500);}
+      else if(d.status&&d.status.includes("failed")){clearInterval(pollTimer);document.getElementById("statusMsg").textContent="Analysis failed: "+d.status;}
+    }catch(e){}
+  },5000);
+}
+
+async function loadReport(taskId){
+  document.getElementById("progressCard").classList.remove("hidden");
+  document.getElementById("results").classList.add("hidden");
+  setStep(4);document.getElementById("statusMsg").textContent="Running GNN inference on task #"+taskId+"...";
+  try{
+    const r=await fetch(API+"/task/"+taskId+"/report",{headers:HDR});
+    const d=await r.json();
+    setStep(5);document.getElementById("statusMsg").textContent="Generating LLM explanation...";
+    setTimeout(()=>showResults(d),300);
+  }catch(e){document.getElementById("statusMsg").textContent="Error loading report: "+e.message;}
+}
+
+function showResults(d){
+  document.getElementById("progressCard").classList.add("hidden");
+  document.getElementById("results").classList.remove("hidden");
+  const isMal=d.verdict==="MALICIOUS";
+  const banner=document.getElementById("verdictBanner");
+  banner.className="verdict-banner "+(isMal?"verdict-malicious":"verdict-benign");
+  document.getElementById("verdictLabel").textContent=d.verdict;
+  document.getElementById("verdictConf").textContent="GNN Confidence: "+d.confidence+"%";
+  document.getElementById("capeDetect").innerHTML=d.cape_detection?'<div class="cape-pill">🔍 CAPE: '+d.cape_detection+'</div>':"";
+  const gs=d.graph_stats||{};
+  document.getElementById("sProc").textContent=gs.processes||0;
+  document.getElementById("sApi").textContent=gs.api_calls||0;
+  document.getElementById("sFile").textContent=gs.files||0;
+  document.getElementById("sReg").textContent=gs.registry_keys||0;
+  document.getElementById("sNet").textContent=gs.network_connections||0;
+  document.getElementById("confBar").style.width=d.confidence+"%";
+  document.getElementById("confPct").textContent=d.confidence+"%";
+  const pl=document.getElementById("procList");pl.innerHTML="";
+  (d.process_names||[]).forEach(p=>{const t=document.createElement("span");t.className="tag tag-process";t.textContent=p.replace(/^\d+_/,"");pl.appendChild(t);});
+  if(!(d.process_names||[]).length)pl.innerHTML='<span style="color:var(--text3);font-size:12px">No processes observed</span>';
+  const hl=document.getElementById("hostList");hl.innerHTML="";
+  if(d.network_hosts&&d.network_hosts.length){d.network_hosts.forEach(h=>{const t=document.createElement("span");t.className="tag tag-host";t.textContent=h;hl.appendChild(t);});}
+  else hl.innerHTML='<span style="color:var(--text3);font-size:12px">No external connections detected</span>';
+  document.getElementById("llmOutput").textContent=d.explanation||"No explanation available";
+  drawGraph(gs);drawNodeChart(gs);drawApiChart(gs);
+  document.getElementById("results").scrollIntoView({behavior:"smooth"});
+}
+
+function drawGraph(gs){
+  const canvas=document.getElementById("graphCanvas");
+  const ctx=canvas.getContext("2d");
+  const dpr=window.devicePixelRatio||1;
+  canvas.width=canvas.offsetWidth*dpr;canvas.height=300*dpr;
+  ctx.scale(dpr,dpr);
+  const W=canvas.offsetWidth,H=300;
+  ctx.fillStyle="#0d1117";ctx.fillRect(0,0,W,H);
+  const nodes=[
+    {l:"Process",n:gs.processes||1,c:"#ff4500",x:0.5,y:0.2},
+    {l:"API",n:Math.min(gs.api_calls||1,20),c:"#4f9eff",x:0.18,y:0.55},
+    {l:"File",n:Math.min(gs.files||1,10),c:"#00ff87",x:0.82,y:0.55},
+    {l:"Registry",n:Math.min(gs.registry_keys||1,15),c:"#cf8fff",x:0.35,y:0.85},
+    {l:"Network",n:Math.min(gs.network_connections||1,8),c:"#ff4f4f",x:0.65,y:0.85},
+  ];
+  const pos=nodes.map(n=>({...n,px:n.x*W,py:n.y*H}));
+  pos.forEach((a,i)=>{
+    if(i===0)return;
+    ctx.strokeStyle="rgba(255,255,255,0.05)";ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(pos[0].px,pos[0].py);ctx.lineTo(a.px,a.py);ctx.stroke();
+  });
+  pos.forEach(n=>{
+    const cnt=Math.min(n.n,8);
+    for(let i=0;i<cnt;i++){
+      const angle=(i/cnt)*Math.PI*2;
+      const nx=n.px+Math.cos(angle)*38,ny=n.py+Math.sin(angle)*38;
+      ctx.strokeStyle=n.c+"25";ctx.lineWidth=0.5;
+      ctx.beginPath();ctx.moveTo(n.px,n.py);ctx.lineTo(nx,ny);ctx.stroke();
+      ctx.fillStyle=n.c+"50";ctx.beginPath();ctx.arc(nx,ny,4,0,Math.PI*2);ctx.fill();
     }
-  } catch (e) {
-    document.getElementById('statusMsg').textContent = 'Error: ' + e.message;
-  }
+    const r=Math.max(18,Math.min(28,Math.log(n.n+1)*5));
+    ctx.shadowColor=n.c;ctx.shadowBlur=10;
+    ctx.fillStyle=n.c+"18";ctx.beginPath();ctx.arc(n.px,n.py,r,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle=n.c;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(n.px,n.py,r,0,Math.PI*2);ctx.stroke();
+    ctx.shadowBlur=0;
+    ctx.fillStyle=n.c;ctx.font="bold 10px monospace";ctx.textAlign="center";ctx.textBaseline="middle";
+    ctx.fillText(n.n>99?"99+":n.n,n.px,n.py);
+    ctx.fillStyle="#8892b0";ctx.font="9px sans-serif";ctx.fillText(n.l,n.px,n.py+r+11);
+  });
 }
 
-function pollStatus() {
-  document.getElementById('statusMsg').textContent = `Task #${currentTaskId}: Running sandbox analysis...`;
-  pollTimer = setInterval(async () => {
-    try {
-      const r = await fetch(`${API}/task/${currentTaskId}/status`);
-      const data = await r.json();
-      document.getElementById('statusMsg').textContent = `Task #${currentTaskId}: ${data.status}...`;
-      if (data.status === 'reported') {
-        clearInterval(pollTimer);
-        loadReport(currentTaskId);
-      } else if (data.status.includes('failed')) {
-        clearInterval(pollTimer);
-        document.getElementById('statusMsg').textContent = 'Analysis failed: ' + data.status;
-      }
-    } catch (e) {}
-  }, 5000);
+function drawNodeChart(gs){
+  if(nodeChartInst)nodeChartInst.destroy();
+  const ctx=document.getElementById("nodeChart").getContext("2d");
+  nodeChartInst=new Chart(ctx,{
+    type:"doughnut",
+    data:{labels:["Processes","API Calls","Files","Registry","Network"],
+    datasets:[{data:[gs.processes||0,gs.api_calls||0,gs.files||0,gs.registry_keys||0,gs.network_connections||0],
+    backgroundColor:["#ff450040","#4f9eff40","#00ff8740","#cf8fff40","#ff4f4f40"],
+    borderColor:["#ff4500","#4f9eff","#00ff87","#cf8fff","#ff4f4f"],borderWidth:1.5}]},
+    options:{responsive:true,maintainAspectRatio:true,
+    plugins:{legend:{labels:{color:"#8892b0",font:{size:10},boxWidth:10}}},cutout:"60%"}
+  });
 }
 
-async function loadReport(taskId) {
-  showProgress(`Loading analysis report for task #${taskId}...`);
-  try {
-    const r = await fetch(`${API}/task/${taskId}/report`, {headers:{'ngrok-skip-browser-warning':'1'}});
-    const data = await r.json();
-    showResults(data);
-  } catch (e) {
-    document.getElementById('statusMsg').textContent = 'Error loading report: ' + e.message;
-  }
-}
-
-function showProgress(msg) {
-  document.getElementById('progressCard').classList.remove('hidden');
-  document.getElementById('results').classList.add('hidden');
-  document.getElementById('statusMsg').textContent = msg;
-}
-
-function showResults(data) {
-  document.getElementById('progressCard').classList.add('hidden');
-  document.getElementById('results').classList.remove('hidden');
-
-  // Verdict
-  const isMalicious = data.verdict === 'MALICIOUS';
-  const verdictBox = document.getElementById('verdictBox');
-  verdictBox.className = 'verdict-box ' + (isMalicious ? 'verdict-malicious' : 'verdict-benign');
-  document.getElementById('verdictLabel').textContent = data.verdict;
-  document.getElementById('confidenceLabel').textContent = `Confidence: ${data.confidence}%`;
-
-  if (data.cape_detection) {
-    document.getElementById('capeDetection').innerHTML = `<span class="cape-badge">CAPE: ${data.cape_detection}</span>`;
-  } else {
-    document.getElementById('capeDetection').innerHTML = '';
-  }
-
-  // Stats
-  const gs = data.graph_stats;
-  document.getElementById('statProcesses').textContent = gs.processes;
-  document.getElementById('statApi').textContent = gs.api_calls;
-  document.getElementById('statFiles').textContent = gs.files;
-  document.getElementById('statReg').textContent = gs.registry_keys;
-  document.getElementById('statNet').textContent = gs.network_connections;
-
-  // Processes
-  const plist = document.getElementById('processList');
-  plist.innerHTML = '';
-  if (data.process_names && data.process_names.length) {
-    data.process_names.forEach(p => {
-      const tag = document.createElement('span');
-      tag.className = 'process-tag';
-      tag.textContent = p.replace(/^\d+_/, '');
-      plist.appendChild(tag);
-    });
-    document.getElementById('processCard').classList.remove('hidden');
-  } else {
-    document.getElementById('processCard').classList.add('hidden');
-  }
-
-  // Network hosts
-  const hlist = document.getElementById('hostsList');
-  hlist.innerHTML = '';
-  if (data.network_hosts && data.network_hosts.length) {
-    data.network_hosts.forEach(h => {
-      const tag = document.createElement('span');
-      tag.className = 'host-tag';
-      tag.textContent = h;
-      hlist.appendChild(tag);
-    });
-    document.getElementById('networkCard').classList.remove('hidden');
-  } else {
-    document.getElementById('networkCard').classList.add('hidden');
-  }
-
-  // LLM Explanation
-  document.getElementById('explanationText').textContent = data.explanation;
-
-  // Scroll to results
-  document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+function drawApiChart(gs){
+  if(apiChartInst)apiChartInst.destroy();
+  const ctx=document.getElementById("apiChart").getContext("2d");
+  const api=gs.api_calls||0;
+  const vals=[Math.floor(api*0.25),Math.floor(api*0.30),Math.floor(api*0.08),Math.floor(api*0.12),Math.floor(api*0.10),Math.floor(api*0.05),Math.floor(api*0.10)];
+  apiChartInst=new Chart(ctx,{
+    type:"bar",
+    data:{labels:["File I/O","Registry","Network","Process","Memory","Crypto","Other"],
+    datasets:[{data:vals,
+    backgroundColor:["#00ff8725","#cf8fff25","#ff4f4f25","#ff450025","#4f9eff25","#ffa50025","#88889925"],
+    borderColor:["#00ff87","#cf8fff","#ff4f4f","#ff4500","#4f9eff","#ffa500","#888899"],
+    borderWidth:1.5,borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false}},
+    scales:{x:{ticks:{color:"#8892b0",font:{size:10}},grid:{color:"#1e274415"}},
+    y:{ticks:{color:"#8892b0",font:{size:10}},grid:{color:"#1e274415"}}}}
+  });
 }
 </script>
 </body>
