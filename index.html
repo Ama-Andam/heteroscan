@@ -111,14 +111,14 @@ body{font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(
     <div class="logo-icon">🔬</div>
     <div>
       <div class="logo-text">HeteroScan</div>
-      <div class="logo-sub">Heterogeneous GNN + LLM Behavioral Analysis</div>
+      <div class="logo-sub">Heterogeneous Graph + Ensemble Classifier + LLM Analysis</div>
     </div>
   </div>
   <div class="header-right">
     <div class="status-dot"></div>
     <span>System Online</span>
     <span style="color:var(--border2)">|</span>
-    <span>GNN: Loaded</span>
+    <span>Ensemble: Loaded</span>
     <span style="color:var(--border2)">|</span>
     <span>LLM: Ready</span>
   </div>
@@ -158,7 +158,7 @@ body{font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(
       <div class="step"><div class="step-dot" id="s1">1</div><div class="step-label">Submit to CAPE</div></div>
       <div class="step"><div class="step-dot" id="s2">2</div><div class="step-label">Sandbox Execution</div></div>
       <div class="step"><div class="step-dot" id="s3">3</div><div class="step-label">Build Graph</div></div>
-      <div class="step"><div class="step-dot" id="s4">4</div><div class="step-label">GNN Inference</div></div>
+      <div class="step"><div class="step-dot" id="s4">4</div><div class="step-label">Ensemble Classification</div></div>
       <div class="step"><div class="step-dot" id="s5">5</div><div class="step-label">LLM Explanation</div></div>
     </div>
     <div class="progress-bar-wrap" style="margin-top:16px"><div class="progress-bar"></div></div>
@@ -277,7 +277,7 @@ body{font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(
       1. Drag and drop a Windows executable (.exe, .dll) onto the upload zone, or click Browse File to select one from your computer.<br><br>
       2. Click Analyze Sample to submit it to the CAPE sandbox. The file executes in an isolated Windows 10 virtual machine.<br><br>
       3. Wait 3–5 minutes for sandbox execution and behavioral report generation.<br><br>
-      4. HeteroScan automatically builds a heterogeneous behavioral graph, runs GNN inference, and generates an LLM explanation.<br><br>
+      4. HeteroScan automatically builds a heterogeneous behavioral graph, runs ensemble classification, and generates an LLM explanation.<br><br>
       5. Review the verdict, behavioral graph visualization, graph statistics, network connections, and AI-generated analysis report.
     </div>
 
@@ -292,8 +292,8 @@ body{font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(
 
     <div class="info-title">Understanding the Verdict</div>
     <div class="info-text">
-      The MALICIOUS / BENIGN verdict is produced by a Heterogeneous Graph Attention Network (HAN) trained on behavioral graphs from 600+ analyzed samples. The confidence score reflects model certainty — scores above 95% indicate strong behavioral evidence, while 70–95% suggests suspicious but not definitive patterns.<br><br>
-      The GNN operates on the structural properties of the behavioral graph, not on signatures or hashes. This means it can detect previously unseen malware variants that exhibit known behavioral patterns.
+      The MALICIOUS / BENIGN verdict is produced by a Voting Ensemble of Random Forest, Extra Trees, and XGBoost classifiers trained on 55 graph-derived structural features from 2,516 behavioral graphs across 37 malware families. The confidence score reflects ensemble agreement — scores above 90% indicate strong behavioral evidence.<br><br>
+      The ensemble classifier operates on the structural properties of the behavioral graph, not on signatures or hashes. This means it can detect previously unseen malware variants that exhibit known behavioral patterns.
     </div>
 
     <div class="info-title">Graph Visualization Guide</div>
@@ -315,7 +315,7 @@ body{font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(
 </div>
 
 <script>
-const API = "https://3096-134-129-201-10.ngrok-free.app";
+const API = "https://4e7f-134-129-201-10.ngrok-free.app";
 const HDR = {"ngrok-skip-browser-warning":"1"};
 let selectedFile=null, pollTimer=null, nodeChartInst=null, apiChartInst=null;
 
@@ -356,37 +356,38 @@ async function submitFile(){
   document.getElementById("results").classList.add("hidden");
   setStep(1);document.getElementById("statusMsg").textContent="Submitting sample to CAPE sandbox...";
   try{
-    const r=await fetch(API+"/analyze",{method:"POST",body:fd,headers:HDR});
+    const r=await fetch("/analyze",{method:"POST",body:fd});
     const d=await r.json();
-    if(d.task_id){setStep(2);pollStatus(d.task_id);}
+    if(d.task_id){setStep(2);}
+    if(d.verdict){
+      setStep(3);await new Promise(res=>setTimeout(res,300));
+      setStep(4);await new Promise(res=>setTimeout(res,300));
+      setStep(5);await new Promise(res=>setTimeout(res,300));
+      showResults(d);return;
+    }
+    pollStatus(d.task_id);
   }catch(e){document.getElementById("statusMsg").textContent="Error: "+e.message;}
 }
-
 function pollStatus(taskId){
   document.getElementById("statusMsg").textContent="Task #"+taskId+": Executing in sandbox VM...";
   pollTimer=setInterval(async()=>{
     try{
-      const r=await fetch(API+"/task/"+taskId+"/status",{headers:HDR});
+      const r=await fetch("/task/"+taskId+"/status");
       const d=await r.json();
-      document.getElementById("statusMsg").textContent="Task #"+taskId+": "+d.status+"...";
-      if(d.status==="reported"){clearInterval(pollTimer);setStep(3);document.getElementById("statusMsg").textContent="Building behavioral graph...";setTimeout(()=>loadReport(taskId),500);}
-      else if(d.status&&d.status.includes("failed")){clearInterval(pollTimer);document.getElementById("statusMsg").textContent="Analysis failed: "+d.status;}
+      if(d.status==="reported"){clearInterval(pollTimer);setStep(3);setTimeout(()=>loadReport(taskId),500);}
+      else if(d.status&&d.status.includes("failed")){clearInterval(pollTimer);document.getElementById("statusMsg").textContent="Analysis failed.";}
     }catch(e){}
   },5000);
 }
-
 async function loadReport(taskId){
-  document.getElementById("progressCard").classList.remove("hidden");
-  document.getElementById("results").classList.add("hidden");
-  setStep(4);document.getElementById("statusMsg").textContent="Running GNN inference on task #"+taskId+"...";
   try{
-    const r=await fetch(API+"/task/"+taskId+"/report",{headers:HDR});
+    const r=await fetch("/task/"+taskId+"/report");
     const d=await r.json();
-    setStep(5);document.getElementById("statusMsg").textContent="Generating LLM explanation...";
-    setTimeout(()=>showResults(d),300);
+    setStep(4);await new Promise(res=>setTimeout(res,300));
+    setStep(5);await new Promise(res=>setTimeout(res,300));
+    showResults(d);
   }catch(e){document.getElementById("statusMsg").textContent="Error loading report: "+e.message;}
 }
-
 function showResults(d){
   document.getElementById("progressCard").classList.add("hidden");
   document.getElementById("results").classList.remove("hidden");
@@ -394,7 +395,7 @@ function showResults(d){
   const banner=document.getElementById("verdictBanner");
   banner.className="verdict-banner "+(isMal?"verdict-malicious":"verdict-benign");
   document.getElementById("verdictLabel").textContent=d.verdict;
-  document.getElementById("verdictConf").textContent="GNN Confidence: "+d.confidence+"%";
+  document.getElementById("verdictConf").textContent="Ensemble Confidence: "+d.ensemble_confidence+"%";
   document.getElementById("capeDetect").innerHTML=d.cape_detection?'<div class="cape-pill">🔍 CAPE: '+d.cape_detection+'</div>':"";
   const gs=d.graph_stats||{};
   document.getElementById("sProc").textContent=gs.processes||0;
@@ -402,8 +403,8 @@ function showResults(d){
   document.getElementById("sFile").textContent=gs.files||0;
   document.getElementById("sReg").textContent=gs.registry_keys||0;
   document.getElementById("sNet").textContent=gs.network_connections||0;
-  document.getElementById("confBar").style.width=d.confidence+"%";
-  document.getElementById("confPct").textContent=d.confidence+"%";
+  document.getElementById("confBar").style.width=d.ensemble_confidence+"%";
+  document.getElementById("confPct").textContent=d.ensemble_confidence+"%";
   const pl=document.getElementById("procList");pl.innerHTML="";
   (d.process_names||[]).forEach(p=>{const t=document.createElement("span");t.className="tag tag-process";t.textContent=p.replace(/^\d+_/,"");pl.appendChild(t);});
   if(!(d.process_names||[]).length)pl.innerHTML='<span style="color:var(--text3);font-size:12px">No processes observed</span>';
