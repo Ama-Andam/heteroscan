@@ -356,25 +356,28 @@ async function submitFile(){
   document.getElementById("results").classList.add("hidden");
   setStep(1);document.getElementById("statusMsg").textContent="Submitting sample to CAPE sandbox...";
   try{
-    setStep(2);document.getElementById("statusMsg").textContent="Executing in sandbox VM... please wait 2-3 minutes";
-    const pingInterval=setInterval(()=>{fetch(API+"/health",{headers:{"ngrok-skip-browser-warning":"true"}}).catch(()=>{});},20000);
-    const r=await fetch(API+"/analyze",{method:"POST",body:fd,headers:{"ngrok-skip-browser-warning":"true"}});
-    clearInterval(pingInterval);
-    const d=await r.json();
-    if(d.error){document.getElementById("statusMsg").textContent="Error: "+d.error;return;}
-    setStep(3);await new Promise(res=>setTimeout(res,300));
-    setStep(4);await new Promise(res=>setTimeout(res,300));
-    setStep(5);await new Promise(res=>setTimeout(res,300));
-    showResults(d);
+    setStep(2);document.getElementById("statusMsg").textContent="Submitting to sandbox...";
+    const sub=await fetch(API+"/submit",{method:"POST",body:fd,headers:{"ngrok-skip-browser-warning":"true"}});
+    const sd=await sub.json();
+    if(sd.error){document.getElementById("statusMsg").textContent="Error: "+sd.error;return;}
+    pollStatus(sd.task_id);
   }catch(e){document.getElementById("statusMsg").textContent="Error: "+e.message;}
 }
 function pollStatus(taskId){
-  document.getElementById("statusMsg").textContent="Task #"+taskId+": Executing in sandbox VM...";
+  document.getElementById("statusMsg").textContent="Task #"+taskId+": Executing in sandbox VM... (2-3 min)";
   pollTimer=setInterval(async()=>{
     try{
-      const r=await fetch("/task/"+taskId+"/status");
+      const r=await fetch(API+"/task/"+taskId+"/status",{headers:{"ngrok-skip-browser-warning":"true"}});
       const d=await r.json();
-      if(d.status==="reported"){clearInterval(pollTimer);setStep(3);setTimeout(()=>loadReport(taskId),500);}
+      if(d.status==="reported"){clearInterval(pollTimer);setStep(3);
+        document.getElementById("statusMsg").textContent="Building graph and classifying...";
+        setTimeout(async()=>{
+          const rr=await fetch(API+"/task/"+taskId+"/report",{headers:{"ngrok-skip-browser-warning":"true"}});
+          const dd=await rr.json();
+          setStep(4);await new Promise(res=>setTimeout(res,300));
+          setStep(5);await new Promise(res=>setTimeout(res,300));
+          showResults(dd);
+        },500);}
       else if(d.status&&d.status.includes("failed")){clearInterval(pollTimer);document.getElementById("statusMsg").textContent="Analysis failed.";}
     }catch(e){}
   },5000);
