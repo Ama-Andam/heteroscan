@@ -356,7 +356,7 @@ async function submitFile(){
   document.getElementById("results").classList.add("hidden");
   setStep(1);document.getElementById("statusMsg").textContent="Submitting sample to CAPE sandbox...";
   try{
-    const r=await fetch("/analyze",{method:"POST",body:fd});
+    const r=await fetch(API+"/analyze",{method:"POST",body:fd,headers:{"ngrok-skip-browser-warning":"true"}});
     const d=await r.json();
     if(d.task_id){setStep(2);}
     if(d.verdict){
