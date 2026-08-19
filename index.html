@@ -356,20 +356,16 @@ async function submitFile(){
   document.getElementById("results").classList.add("hidden");
   setStep(1);document.getElementById("statusMsg").textContent="Submitting sample to CAPE sandbox...";
   try{
-    // Live submission requires backend connection
-    document.getElementById("statusMsg").textContent="Live submission requires backend. Use demo samples below to explore pre-analyzed results.";
-    document.getElementById("progressCard").classList.add("hidden");
-    return;
+    setStep(2);document.getElementById("statusMsg").textContent="Executing in sandbox VM... please wait 2-3 minutes";
+    const pingInterval=setInterval(()=>{fetch(API+"/health",{headers:{"ngrok-skip-browser-warning":"true"}}).catch(()=>{});},20000);
     const r=await fetch(API+"/analyze",{method:"POST",body:fd,headers:{"ngrok-skip-browser-warning":"true"}});
+    clearInterval(pingInterval);
     const d=await r.json();
-    if(d.task_id){setStep(2);}
-    if(d.verdict){
-      setStep(3);await new Promise(res=>setTimeout(res,300));
-      setStep(4);await new Promise(res=>setTimeout(res,300));
-      setStep(5);await new Promise(res=>setTimeout(res,300));
-      showResults(d);return;
-    }
-    pollStatus(d.task_id);
+    if(d.error){document.getElementById("statusMsg").textContent="Error: "+d.error;return;}
+    setStep(3);await new Promise(res=>setTimeout(res,300));
+    setStep(4);await new Promise(res=>setTimeout(res,300));
+    setStep(5);await new Promise(res=>setTimeout(res,300));
+    showResults(d);
   }catch(e){document.getElementById("statusMsg").textContent="Error: "+e.message;}
 }
 function pollStatus(taskId){
