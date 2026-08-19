@@ -388,7 +388,7 @@ async function loadReport(taskId){
   setStep(4);await new Promise(res=>setTimeout(res,300));
   setStep(5);await new Promise(res=>setTimeout(res,300));
   try{
-    const r=await fetch("demo_"+taskId+".json");
+    const r=await fetch("https://ama-andam.github.io/heteroscan/demo_"+taskId+".json");
     const d=await r.json();
     showResults(d);
   }catch(e){document.getElementById("statusMsg").textContent="Error loading report: "+e.message;}
