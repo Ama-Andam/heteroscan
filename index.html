@@ -411,7 +411,7 @@ function showResults(d){
   const hl=document.getElementById("hostList");hl.innerHTML="";
   if(d.network_hosts&&d.network_hosts.length){d.network_hosts.forEach(h=>{const t=document.createElement("span");t.className="tag tag-host";t.textContent=h;hl.appendChild(t);});}
   else hl.innerHTML='<span style="color:var(--text3);font-size:12px">No external connections detected</span>';
-  document.getElementById("llmOutput").textContent=d.explanation||"No explanation available";
+  document.getElementById("llmOutput").textContent=d.llm_explanation||"No explanation available";
   drawGraph(gs);drawNodeChart(gs);drawApiChart(gs);
   document.getElementById("results").scrollIntoView({behavior:"smooth"});
 }
