@@ -380,11 +380,16 @@ function pollStatus(taskId){
   },5000);
 }
 async function loadReport(taskId){
+  document.getElementById("progressCard").classList.remove("hidden");
+  document.getElementById("results").classList.add("hidden");
+  document.getElementById("statusMsg").textContent="Loading pre-analyzed report...";
+  setStep(2);await new Promise(res=>setTimeout(res,300));
+  setStep(3);await new Promise(res=>setTimeout(res,300));
+  setStep(4);await new Promise(res=>setTimeout(res,300));
+  setStep(5);await new Promise(res=>setTimeout(res,300));
   try{
-    const r=await fetch("/task/"+taskId+"/report");
+    const r=await fetch("demo_"+taskId+".json");
     const d=await r.json();
-    setStep(4);await new Promise(res=>setTimeout(res,300));
-    setStep(5);await new Promise(res=>setTimeout(res,300));
     showResults(d);
   }catch(e){document.getElementById("statusMsg").textContent="Error loading report: "+e.message;}
 }
