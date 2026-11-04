@@ -1,502 +1,1087 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HeteroScan — Behavioral Malware Analysis</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<meta charset="utf-8">
+<script>
+const API = "https://77fd-134-129-201-10.ngrok-free.app"; // backend base URL: swap this each demo
+const REPO_URL = "https://github.com/Ama-Andam/heteroscan";
+const PAPER_URL = ""; // empty: the Paper link scrolls to the citation in the footer
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>HeteroScan, behavioral malware analysis</title>
+<meta name="description" content="Upload a Windows malware sample or open a pre-analyzed report. HeteroScan runs it in a CAPE sandbox, models its behavior as a heterogeneous graph, classifies it with an ensemble, and explains the verdict with an LLM.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23c9f25a'/%3E%3Cpath d='M9 12V10a1 1 0 0 1 1-1h2M20 9h2a1 1 0 0 1 1 1v2M23 20v2a1 1 0 0 1-1 1h-2M12 23h-2a1 1 0 0 1-1-1v-2' stroke='%23232b10' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%23232b10'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Hanken+Grotesk:wght@400;500;600;700&family=Martian+Mono:wght@400;500&display=swap">
 <style>
-*{margin:0;padding:0;box-sizing:border-box;}
-:root{
-  --bg:#07090f;--bg2:#0d1117;--bg3:#141929;--bg4:#1a2035;
-  --border:#1e2744;--border2:#2d3561;
-  --accent:#ff4500;--accent2:#ff6b35;--blue:#4f9eff;
-  --text:#e0e6f0;--text2:#8892b0;--text3:#4a5568;
-  --success:#00ff87;--danger:#ff4f4f;--warn:#ffa500;
+/* shared base (injected) */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;min-height:100dvh;overflow-x:clip;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+img,svg{display:block}
+[hidden]{display:none!important}
+.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.skip{position:absolute;left:12px;top:-60px;z-index:100;padding:10px 14px;border-radius:6px}
+.skip:focus{top:12px}
+button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation}
+button:disabled{cursor:not-allowed}
+a{color:inherit}
+code,.ioc-v{overflow-wrap:anywhere;word-break:normal}
+h1,h2,h3{text-wrap:balance}
+p,li{text-wrap:pretty}
+.md-table{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.md-table table{border-collapse:collapse;width:100%;min-width:520px}
+.ioc{display:flex;gap:.75em;align-items:baseline;min-width:0}
+.ioc-v{min-width:0;flex:1}
+.file-input{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
+.btn-icon.spin{animation:spin .8s linear infinite}
+[data-state="submitting"] .btn-icon,[data-state="analyzing"] .btn-icon{animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+[data-results]{transition:opacity .18s cubic-bezier(.23,1,.32,1)}
+[data-results].is-swapping{opacity:.25}
+.more-chev{transition:transform .2s cubic-bezier(.23,1,.32,1)}
+.more-btn[aria-expanded="true"] .more-chev{transform:rotate(180deg)}
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-property:opacity,color,background-color,border-color!important}
 }
-body{font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;}
-.header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 32px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100;}
-.logo{display:flex;align-items:center;gap:10px;}
-.logo-icon{width:32px;height:32px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;}
-.logo-text{font-size:18px;font-weight:700;letter-spacing:1px;}
-.logo-sub{font-size:11px;color:var(--text2);letter-spacing:0.5px;}
-.status-dot{width:8px;height:8px;background:var(--success);border-radius:50%;animation:pulse2 2s infinite;}
-@keyframes pulse2{0%,100%{opacity:1;}50%{opacity:0.4;}}
-.header-right{display:flex;align-items:center;gap:16px;font-size:12px;color:var(--text2);}
-.tabs{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 32px;display:flex;}
-.tab{padding:14px 24px;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.2s;letter-spacing:0.3px;}
-.tab:hover{color:var(--text);}
-.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
-.main{max-width:1200px;margin:0 auto;padding:28px 24px;}
-.card{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:24px;margin-bottom:20px;}
-.card-header{display:flex;align-items:center;gap:8px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border);}
-.card-title{font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:1.5px;}
-.card-icon{font-size:16px;}
-.upload-area{border:2px dashed var(--border2);border-radius:10px;padding:48px 24px;text-align:center;cursor:pointer;transition:all 0.3s;}
-.upload-area:hover,.upload-area.over{border-color:var(--accent);background:rgba(255,69,0,0.04);}
-.upload-icon{font-size:48px;margin-bottom:14px;opacity:0.6;}
-.upload-text{color:var(--text2);margin-bottom:6px;}
-.upload-sub{color:var(--text3);font-size:12px;}
-.file-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(255,69,0,0.12);border:1px solid rgba(255,69,0,0.3);color:var(--accent2);padding:6px 14px;border-radius:20px;font-size:12px;margin-top:12px;}
-.btn{padding:10px 22px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;border:none;letter-spacing:0.3px;}
-.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:white;}
-.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(255,69,0,0.4);}
-.btn-primary:disabled{opacity:0.4;cursor:not-allowed;transform:none;box-shadow:none;}
-.btn-ghost{background:transparent;border:1px solid var(--border2);color:var(--text2);}
-.btn-ghost:hover{border-color:var(--accent);color:var(--accent);}
-.btn-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px;}
-.demo-label{font-size:12px;color:var(--text3);}
-.progress-bar-wrap{background:var(--bg4);border-radius:4px;height:4px;overflow:hidden;margin:10px 0;}
-.progress-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:4px;width:100%;animation:shimmer 2s linear infinite;background-size:200% 100%;}
-@keyframes shimmer{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
-.status-text{font-size:13px;color:var(--text2);margin-top:8px;}
-.step-list{display:flex;gap:0;margin-top:16px;}
-.step{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;}
-.step:not(:last-child)::after{content:"";position:absolute;top:12px;left:50%;width:100%;height:1px;background:var(--border2);}
-.step-dot{width:24px;height:24px;border-radius:50%;border:2px solid var(--border2);background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text3);z-index:1;}
-.step-dot.done{border-color:var(--success);background:rgba(0,255,135,0.1);color:var(--success);}
-.step-dot.active{border-color:var(--accent);background:rgba(255,69,0,0.1);color:var(--accent);}
-.step-label{font-size:10px;color:var(--text3);text-align:center;}
-.verdict-banner{border-radius:10px;padding:28px;text-align:center;margin-bottom:20px;}
-.verdict-malicious{background:rgba(255,79,79,0.06);border:1px solid rgba(255,79,79,0.3);}
-.verdict-benign{background:rgba(0,255,135,0.06);border:1px solid rgba(0,255,135,0.3);}
-.verdict-label{font-size:40px;font-weight:800;letter-spacing:4px;margin-bottom:6px;}
-.verdict-malicious .verdict-label{color:var(--danger);}
-.verdict-benign .verdict-label{color:var(--success);}
-.verdict-conf{font-size:15px;color:var(--text2);}
-.cape-pill{display:inline-flex;align-items:center;gap:6px;background:rgba(163,45,163,0.12);border:1px solid rgba(163,45,163,0.3);color:#cf8fff;padding:4px 14px;border-radius:20px;font-size:12px;margin-top:10px;}
-.stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;}
-.stat-box{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px 12px;text-align:center;}
-.stat-val{font-size:26px;font-weight:700;color:var(--accent);}
-.stat-lbl{font-size:10px;color:var(--text2);margin-top:4px;text-transform:uppercase;letter-spacing:0.8px;}
-.stat-box.hi{border-color:rgba(255,69,0,0.3);background:rgba(255,69,0,0.04);}
-.two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
-.tag-list{display:flex;flex-wrap:wrap;gap:8px;}
-.tag{padding:4px 12px;border-radius:20px;font-size:12px;font-family:monospace;}
-.tag-process{background:rgba(79,158,255,0.1);border:1px solid rgba(79,158,255,0.25);color:#88b8ff;}
-.tag-host{background:rgba(255,79,79,0.1);border:1px solid rgba(255,79,79,0.3);color:#ff8888;}
-.graph-canvas{width:100%;height:300px;background:var(--bg2);border-radius:8px;display:block;}
-.chart-wrap{position:relative;height:180px;}
-.llm-output{background:var(--bg2);border-radius:8px;padding:20px;font-size:13px;line-height:1.8;color:#c0c8d8;white-space:pre-wrap;word-break:break-word;max-height:500px;overflow-y:auto;}
-.llm-output::-webkit-scrollbar{width:4px;}
-.llm-output::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
-.info-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border);margin-top:24px;}
-.info-title:first-child{margin-top:0;}
-.info-text{color:var(--text2);line-height:1.8;font-size:13px;}
-.info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:16px;}
-.info-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;}
-.info-card-icon{font-size:22px;margin-bottom:8px;}
-.info-card-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px;}
-.info-card-text{font-size:12px;color:var(--text2);line-height:1.6;}
-.pipe-row{display:flex;gap:8px;margin:16px 0;overflow-x:auto;padding-bottom:4px;}
-.pipe-step{flex:1;min-width:110px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center;position:relative;}
-.pipe-step:not(:last-child)::after{content:"→";position:absolute;right:-12px;top:50%;transform:translateY(-50%);color:var(--accent);font-size:14px;z-index:1;}
-.pipe-icon{font-size:20px;margin-bottom:6px;}
-.pipe-title{font-size:11px;font-weight:600;color:var(--text);margin-bottom:3px;}
-.pipe-text{font-size:10px;color:var(--text2);}
-.mitre-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px;}
-.mitre-card{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:12px;}
-.mitre-id{font-size:11px;font-family:monospace;color:var(--accent);font-weight:600;}
-.mitre-name{font-size:12px;color:var(--text);margin-top:2px;}
-.mitre-desc{font-size:11px;color:var(--text2);margin-top:4px;line-height:1.5;}
-.warn-box{background:rgba(255,165,0,0.08);border:1px solid rgba(255,165,0,0.25);border-radius:8px;padding:14px;color:#ffcc88;font-size:13px;line-height:1.6;}
-.hidden{display:none;}
+.md{min-width:0}
+[data-health]{white-space:nowrap}
+@media (max-width:480px){.hl-pre{display:none}}
+
+:root{
+  --bg:oklch(0.955 0.003 110);
+  --tile:oklch(0.993 0.002 110);
+  --ink:oklch(0.17 0.006 110);
+  --on-ink:oklch(0.97 0.004 110);
+  --on-ink-2:oklch(0.78 0.006 110);
+  --line:oklch(0.88 0.004 110);
+  --text:oklch(0.17 0.006 110);
+  --text-2:oklch(0.43 0.008 110);
+  --sunk:oklch(0.955 0.004 110);
+  --signal:oklch(0.89 0.19 122);
+  --on-signal:oklch(0.21 0.05 125);
+  --hot:oklch(0.5 0.2 28);
+  --hot-text:oklch(0.5 0.2 28);
+  --ok-tile:oklch(0.45 0.11 155);
+  --on-hot:oklch(0.985 0.01 28);
+  --on-hot-2:oklch(0.95 0.025 28);
+  --ok:oklch(0.5 0.12 155);
+  --display:"Bricolage Grotesque",system-ui,sans-serif;
+  --sans:"Hanken Grotesk",system-ui,sans-serif;
+  --mono:"Martian Mono",ui-monospace,monospace;
+  --ease-out:cubic-bezier(0.23,1,0.32,1);
+  --r:16px;
+  --z-skip:100;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:oklch(0.12 0.004 110);
+    --tile:oklch(0.19 0.005 110);
+    --ink:oklch(0.955 0.004 110);
+    --on-ink:oklch(0.15 0.006 110);
+    --on-ink-2:oklch(0.38 0.008 110);
+    --line:oklch(0.28 0.006 110);
+    --text:oklch(0.96 0.004 110);
+    --text-2:oklch(0.74 0.008 110);
+    --sunk:oklch(0.235 0.006 110);
+    --hot-text:oklch(0.74 0.15 28);
+    --ok:oklch(0.78 0.13 155);
+  }
+}
+body{background:var(--bg);color:var(--text);font:400 1rem/1.55 var(--sans)}
+:focus-visible{outline:3px solid var(--text);outline-offset:3px;border-radius:6px}
+.skip{z-index:var(--z-skip);background:var(--signal);color:var(--on-signal);font-weight:700}
+.wrap{max-width:1300px;margin:0 auto;padding:0 clamp(12px,2.5vw,24px)}
+
+/* top bar */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0;flex-wrap:wrap}
+.word{display:flex;align-items:center;gap:10px;font:800 1.375rem/1 var(--display);letter-spacing:-.03em;text-decoration:none}
+.word .mk{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--signal);color:var(--on-signal)}
+.word .i{width:19px;height:19px;stroke-width:2.2}
+.top nav{display:flex;align-items:center;gap:6px}
+.nav-sep{width:1px;height:24px;background:var(--line);margin:0 4px}
+.pill[aria-current="page"]{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+@media (hover:hover) and (pointer:fine){a.pill[aria-current="page"]:hover{background:var(--ink)}}
+.back{display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 18px;border-radius:999px;background:var(--signal);color:var(--on-signal);text-decoration:none;font-weight:700;margin-top:6px}
+.back .i{width:16px;height:16px}
+.pill{display:inline-flex;align-items:center;gap:7px;height:40px;padding:0 14px;border-radius:999px;background:var(--tile);border:1px solid var(--line);text-decoration:none;font-weight:600;font-size:.875rem;transition:background-color .15s ease}
+.pill .i{width:16px;height:16px}
+@media (hover:hover) and (pointer:fine){a.pill:hover{background:var(--sunk)}}
+.health{color:var(--text-2);font-weight:500}
+.health::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--text-2)}
+.health[data-state="online"]::before{background:var(--ok)}
+.health[data-state="offline"]::before{background:var(--hot)}
+.hl-word{display:inline-block}
+@media (max-width:480px){.hl-word::first-letter{text-transform:uppercase}}
+.health[data-state="checking"]::before{animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+@media (max-width:480px){.top{row-gap:10px;padding:12px 0}.top nav{width:100%;gap:4px}.nav-sep{display:none}.health{margin-left:auto}}
+@media (max-width:620px){a.pill span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}a.pill{width:40px;padding:0;justify-content:center}}
+
+/* bento */
+.bento{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px;padding-bottom:12px}
+.t{grid-column:span 12;background:var(--tile);border-radius:var(--r);padding:clamp(18px,2.2vw,28px);min-width:0;border:1px solid var(--line)}
+.t-ink{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+.lbl{display:flex;align-items:center;gap:8px;font:500 .75rem/1.3 var(--mono);color:var(--text-2);margin:0 0 14px}
+.t-ink .lbl{color:var(--on-ink-2)}
+.lbl .i{width:14px;height:14px;align-self:flex-start;margin-top:.1em}
+
+/* hero + pipeline */
+.hero{grid-column:span 8;display:flex;flex-direction:column;justify-content:space-between;gap:28px;min-height:340px}
+.pipe{grid-column:span 4}
+@media (max-width:980px){.hero,.pipe{grid-column:span 12}.hero{min-height:0}}
+h1{font:750 clamp(2.25rem,1.3rem + 4vw,4.75rem)/.98 var(--display);letter-spacing:-.04em;margin:0;max-width:13ch;font-optical-sizing:auto}
+#hero-h:focus{outline:none}
+.hero p{margin:0;max-width:52ch;color:var(--on-ink-2);font-size:1.0625rem}
+.hero p b{color:var(--on-ink);font-weight:600}
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.steps li{display:grid;grid-template-columns:44px minmax(0,1fr);gap:14px;align-items:center;padding:12px;border-radius:12px;background:var(--sunk)}
+.steps .ic{display:grid;place-items:center;width:44px;height:44px;border-radius:10px;background:var(--tile);border:1px solid var(--line)}
+.steps .ic .i{width:20px;height:20px}
+.steps li:last-child .ic{background:var(--signal);color:var(--on-signal);border-color:var(--signal)}
+.steps b{display:block;font:650 1rem/1.2 var(--display);letter-spacing:-.01em}
+.steps small{color:var(--text-2);font-size:.875rem}
+
+/* analyze */
+.an{grid-column:span 7}
+.demos-t{grid-column:span 5}
+@media (max-width:980px){.an,.demos-t{grid-column:span 12}}
+h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
+.drop{display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;gap:4px;min-height:160px;padding:20px;border-radius:12px;border:2px dashed var(--line);background:var(--sunk);cursor:pointer;transition:border-color .15s ease,background-color .15s ease}
+.drop:hover,.drop.is-over{border-color:var(--text)}
+.drop[data-has-file]{border-style:solid;border-color:var(--text)}
+.drop:focus-within{outline:3px solid var(--text);outline-offset:3px}
+.drop .i{width:26px;height:26px;margin-bottom:auto}
+.drop strong{font:650 1.125rem/1.2 var(--display)}
+.drop span{color:var(--text-2);font-size:.9375rem}
+.drop [data-filename]{font:400 .8125rem/1.4 var(--mono);color:var(--text);overflow-wrap:anywhere}
+.drop [data-filename]:empty{display:none}
+.an-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:14px}
+.btn{display:inline-flex;align-items:center;gap:10px;height:52px;padding:0 24px;border:0;border-radius:999px;background:var(--signal);color:var(--on-signal);font:700 1rem/1 var(--display);letter-spacing:-.01em;transition:transform .16s var(--ease-out),opacity .15s ease,background-color .2s ease}
+.btn:active:not(:disabled){transform:scale(.97)}
+.btn:disabled{opacity:.5}
+.btn[aria-busy="true"]{opacity:1;cursor:progress}
+.btn[data-state="done"]{background:var(--ok-tile);color:var(--on-hot)}
+.btn .i{width:18px;height:18px;stroke-width:2.2}
+.status-wrap{flex:1 1 220px;min-width:0}
+.status{margin:0;color:var(--text-2);font-size:.875rem}
+.status[data-tone="error"]{color:var(--hot-text);font-weight:600}
+.elapsed{display:block;font:500 .75rem/1.4 var(--mono);color:var(--text-2);margin-top:2px}
+.elapsed:empty{display:none}
+.demos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.demos button{display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:18px;min-height:104px;padding:16px;border-radius:12px;border:1px solid var(--line);background:var(--sunk);text-align:left;transition:transform .16s var(--ease-out),background-color .15s ease,border-color .15s ease}
+.demos button:active{transform:scale(.97)}
+.demos button[aria-busy="true"]{cursor:progress}
+.demo-name{font:700 1.25rem/1 var(--display);letter-spacing:-.02em}
+.demo-id{font:400 .75rem/1 var(--mono);color:var(--text-2)}
+@media (hover:hover) and (pointer:fine){.demos button:hover{border-color:var(--text)}}
+.demos button[aria-pressed="true"]{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+.demos button[aria-pressed="true"] .demo-id{color:var(--on-ink-2)}
+
+/* results */
+.res{grid-column:span 12;display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px;scroll-margin-top:12px}
+.verdict-t{grid-column:span 5;grid-row:span 2;background:var(--ink);color:var(--on-ink);border-color:var(--ink);display:flex;flex-direction:column;justify-content:space-between;gap:24px;min-height:300px}
+[data-verdict="malicious"] .verdict-t{background:var(--hot);border-color:var(--hot);color:var(--on-hot)}
+[data-verdict="benign"] .verdict-t{background:var(--ok-tile);border-color:var(--ok-tile);color:var(--on-hot)}
+.verdict-t .lbl{color:inherit;opacity:.92}
+.verdict-t .i.big{width:40px;height:40px;stroke-width:1.6}
+.vword{font:800 clamp(2.75rem,1.8rem + 3.6vw,5rem)/.92 var(--display);letter-spacing:-.045em;margin:0}
+.vfoot{display:flex;justify-content:space-between;gap:6px 16px;flex-wrap:wrap;font:500 .8125rem/1.4 var(--mono)}
+.vfoot > span{min-width:0;opacity:.92}
+.vfoot b{font-weight:500;overflow-wrap:anywhere}
+.conf-t{grid-column:span 4}
+.clf-t{grid-column:span 3;display:flex;flex-direction:column;justify-content:space-between}
+.stats-t{grid-column:span 7;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));margin:0}
+@media (max-width:1100px){.verdict-t{grid-column:span 12;grid-row:auto;min-height:0}.conf-t{grid-column:span 7}.clf-t{grid-column:span 5}.stats-t{grid-column:span 12}}
+@media (max-width:640px){.conf-t,.clf-t{grid-column:span 12}.stats-t{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.big-num{font:750 clamp(3rem,2rem + 3vw,4.5rem)/.9 var(--display);letter-spacing:-.04em;margin:0 0 18px;font-variant-numeric:tabular-nums}
+.big-num small{font-size:.45em;letter-spacing:0;color:var(--text-2);margin-left:4px}
+.meter{height:14px;border-radius:999px;background:var(--sunk);overflow:hidden;border:1px solid var(--line)}
+.meter span{display:block;height:100%;background:var(--text);border-radius:999px;transform-origin:left;transform:scaleX(calc(var(--pct,0) / 100));transition:transform .8s var(--ease-out)}
+.clf{font:650 1.25rem/1.2 var(--display);letter-spacing:-.015em;margin:0;overflow-wrap:anywhere}
+.stats-t div{padding:20px;border-left:1px solid var(--line);display:flex;flex-direction:column;justify-content:space-between;gap:20px;min-width:0}
+.stats-t div:first-child{border-left:0}
+.stats-t dt{font:500 .75rem/1.3 var(--mono);color:var(--text-2)}
+.stats-t dd{margin:0;font:750 2rem/1 var(--display);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+@media (max-width:640px){.stats-t div{border-left:0;border-top:1px solid var(--line)}.stats-t div:nth-child(-n+2){border-top:0}.stats-t div:nth-child(even){border-left:1px solid var(--line)}.stats-t div:last-child{grid-column:1/-1}}
+
+.ioc-t{grid-column:span 6;padding:0;display:flex;flex-direction:column}
+.ioc-tall{grid-row:span 2}
+.ioc-wide{grid-column:span 12}
+@media (max-width:980px){.ioc-t{grid-column:span 12}.ioc-tall{grid-row:auto}}
+.ioc-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:20px 20px 12px}
+.ioc-h h3{margin:0;font:700 1.125rem/1.2 var(--display);letter-spacing:-.015em;display:flex;align-items:center;gap:8px}
+.ioc-h .i{width:18px;height:18px}
+.ioc-h .cnt{font:750 1.75rem/1 var(--display);letter-spacing:-.03em}
+.ioc-list{list-style:none;margin:0;padding:0 12px 12px;font:400 .75rem/1.55 var(--mono)}
+.ioc-wide .ioc-list{columns:2 420px;column-gap:24px}
+.ioc{padding:8px;border-radius:8px;break-inside:avoid}
+.ioc:nth-child(odd){background:var(--sunk)}
+.ioc-n{color:var(--text-2)}
+.ioc-port{background:var(--signal);color:var(--on-signal);padding:0 3px;border-radius:3px}
+.ioc-empty{background:none!important;color:var(--text-2);font:500 .9375rem/1.4 var(--sans);padding:8px}
+.more-btn{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;height:40px;margin:0 20px 20px;padding:0 16px;border-radius:999px;border:1px solid var(--text);background:none;font:600 .875rem/1 var(--sans)}
+.more-btn .i{width:15px;height:15px}
+@media (hover:hover) and (pointer:fine){.more-btn:hover{background:var(--text);color:var(--tile)}}
+
+/* explanation */
+.ex-t{grid-column:span 12;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2.4fr);gap:24px}
+@media (max-width:900px){.ex-t{grid-template-columns:minmax(0,1fr)}}
+.ai{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;border-radius:999px;background:var(--signal);color:var(--on-signal);font:700 .8125rem/1 var(--sans)}
+.ai .i{width:15px;height:15px}
+.ex-side p{margin:12px 0 0;color:var(--text-2);font-size:.9375rem;max-width:34ch}
+.md{max-width:74ch;line-height:1.65}
+.md .md-h{font-family:var(--display);font-weight:700;letter-spacing:-.02em;line-height:1.15;margin:1.6em 0 .5em}
+.md .md-h1{font-size:1.75rem;margin-top:0}
+.md .md-h2{font-size:1.25rem}
+.md .md-hr{border:0;border-top:1px solid var(--line);margin:1.4em 0}
+.md p{margin:0 0 .9em}
+.md code{font:400 .78em/1 var(--mono);background:var(--sunk);padding:.2em .4em;border-radius:5px}
+.md-list{padding-left:1.25em}
+.md .md-table{border-radius:12px;background:var(--sunk);margin:.6em 0 1.2em}
+.md table{font-size:.875rem}
+.md th{text-align:left;font:700 .875rem/1.3 var(--display);padding:12px 14px;border-bottom:1px solid var(--line)}
+.md td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+.md tr:last-child td{border-bottom:0}
+
+/* progress stepper */
+.stepper{list-style:none;margin:18px 0 0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;position:relative}
+.stepper::before{content:"";position:absolute;left:10%;right:10%;top:17px;height:2px;background:var(--line)}
+.stepper li{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;min-width:0}
+.st-dot{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:var(--tile);border:2px solid var(--line);color:var(--text-2);transition:background-color .2s ease,border-color .2s ease,color .2s ease}
+.st-dot .i{width:16px;height:16px;stroke-width:2}
+.st-label{font:600 .75rem/1.2 var(--sans);color:var(--text-2)}
+.stepper li[data-state="active"] .st-dot{background:var(--signal);border-color:var(--signal);color:var(--on-signal)}
+.stepper li[data-state="active"] .st-dot .i{animation:spin .8s linear infinite}
+.stepper li[data-state="active"] .st-label,.stepper li[data-state="done"] .st-label{color:var(--text)}
+.stepper li[data-state="done"] .st-dot{background:var(--text);border-color:var(--text);color:var(--tile)}
+.stepper li[data-state="error"] .st-dot{background:var(--hot);border-color:var(--hot);color:var(--on-hot)}
+.stepper li[data-state="error"] .st-label{color:var(--hot-text)}
+
+/* CAPE tag */
+.cape{display:inline-flex;align-items:center;gap:8px;margin:14px 0 0;padding:6px 12px;border-radius:999px;background:oklch(1 0 0 / .16);font:500 .8125rem/1.3 var(--mono);max-width:100%}
+.cape b{font-weight:500;overflow-wrap:anywhere}
+
+/* behavior graph */
+.graph-t{grid-column:span 12;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2.3fr);gap:24px;align-items:center}
+@media (max-width:900px){.graph-t{grid-template-columns:minmax(0,1fr)}}
+.graph-t h3{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 10px}
+.graph-side p{margin:0 0 16px;color:var(--text-2);font-size:.9375rem;max-width:40ch}
+.edge-chips{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.edge-chips li{font:400 .6875rem/1 var(--mono);padding:6px 8px;border-radius:6px;background:var(--sunk);border:1px solid var(--line)}
+.graph-box{min-width:0}
+.graph-svg{display:block;width:100%;height:auto}
+.g-edge{stroke:var(--text-2);stroke-width:1.5;opacity:.55}
+.g-leaf-edge{stroke:var(--text-2);stroke-width:1;opacity:.35}
+.g-leaf{fill:var(--text-2);opacity:.75}
+.g-type{fill:var(--tile);stroke:var(--text);stroke-width:2}
+.g-network{stroke:var(--hot-text)}
+.g-zero{stroke-dasharray:4 4;stroke:var(--text-2)}
+.g-hub{fill:var(--signal);stroke:var(--on-signal);stroke-width:2}
+.graph-svg text{text-anchor:middle}
+.g-count{font:500 11px var(--mono);fill:var(--text)}
+.g-hub-count{fill:var(--on-signal);font-weight:600}
+.g-label{font:650 13px var(--display);fill:var(--text)}
+.g-edge-label{font:500 11px var(--sans);fill:var(--text-2)}
+
+/* about + help */
+.view{display:contents}
+.sec-h{grid-column:span 12;display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:20px 4px 8px}
+.sec-h h1:focus{outline:none}
+.sec-h h1{font:750 clamp(2rem,1.4rem + 2vw,3rem)/1 var(--display);letter-spacing:-.035em;margin:0;max-width:none}
+.sec-h p{margin:0;color:var(--text-2);max-width:60ch}
+.info-t h3{font:700 1.25rem/1.15 var(--display);letter-spacing:-.02em;margin:0 0 14px;display:flex;align-items:center;gap:10px}
+.info-t h3 .i{width:20px;height:20px}
+.info-t p{margin:0 0 12px;color:var(--text-2);max-width:62ch}
+.info-t p:last-child{margin-bottom:0}
+.span-7{grid-column:span 7}.span-5{grid-column:span 5}
+@media (max-width:980px){.span-7,.span-5{grid-column:span 12}}
+.flow{list-style:none;margin:0;padding:0;display:grid;gap:8px;counter-reset:flow}
+.flow li{display:grid;grid-template-columns:32px minmax(0,1fr);gap:12px;padding:12px;border-radius:12px;background:var(--sunk);counter-increment:flow}
+.flow li::before{content:counter(flow);display:grid;place-items:center;width:32px;height:32px;border-radius:9px;background:var(--tile);border:1px solid var(--line);font:500 .8125rem/1 var(--mono)}
+.flow b{display:block;font:650 1rem/1.25 var(--display);letter-spacing:-.01em;margin-bottom:2px}
+.flow span{color:var(--text-2);font-size:.9375rem}
+.nodes{margin:0 0 16px;display:grid;gap:10px}
+.nodes div{display:grid;grid-template-columns:minmax(0,9rem) minmax(0,1fr);gap:4px 12px}
+@media (max-width:480px){.nodes div{grid-template-columns:minmax(0,1fr)}}
+.nodes dt{font:650 .9375rem/1.4 var(--display)}
+.nodes dd{margin:0;color:var(--text-2);font-size:.9375rem}
+.attck{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.attck li{display:grid;grid-template-columns:5.5rem minmax(0,1fr);gap:4px 14px;padding:12px;border-radius:12px;background:var(--sunk)}
+.attck code{font:500 .8125rem/1.5 var(--mono);color:var(--text)}
+.attck b{display:block;font:650 1rem/1.3 var(--display)}
+.attck span{color:var(--text-2);font-size:.9375rem}
+@media (max-width:480px){.attck li{grid-template-columns:minmax(0,1fr)}}
+.safety{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+.safety p{color:var(--on-ink-2)}
+.research{margin:18px 0 0;color:var(--on-ink-2);font-size:.9375rem;max-width:70ch}
+.research i{font-style:italic;color:var(--on-ink)}
+
+/* footer */
+.foot{grid-column:span 12;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:20px 40px;scroll-margin-top:12px}
+@media (max-width:800px){.foot{grid-template-columns:minmax(0,1fr)}}
+.cite{margin:0;font:600 clamp(1.125rem,1rem + .5vw,1.375rem)/1.4 var(--display);letter-spacing:-.01em}
+.cite i{font-style:italic}
+.foot p.aff{margin:0 0 12px;color:var(--on-ink-2)}
+.repo{display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 16px;border-radius:999px;background:var(--signal);color:var(--on-signal);text-decoration:none;font-weight:700}
+.repo .i{width:16px;height:16px}
 </style>
 </head>
 <body>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+<symbol id="i-scan" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></symbol>
+<symbol id="i-scan-search" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/><path d="m16 16-1.9-1.9"/></symbol>
+<symbol id="i-book-open" viewBox="0 0 24 24"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></symbol>
+<symbol id="i-github" viewBox="0 0 24 24"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></symbol>
+<symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol>
+<symbol id="i-waypoints" viewBox="0 0 24 24"><circle cx="12" cy="4.5" r="2.5"/><path d="m10.2 6.3-3.9 3.9"/><circle cx="4.5" cy="12" r="2.5"/><path d="M7 12h10"/><circle cx="19.5" cy="12" r="2.5"/><path d="m13.8 17.7 3.9-3.9"/><circle cx="12" cy="19.5" r="2.5"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></symbol>
+<symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></symbol>
+<symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+<symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></symbol>
+<symbol id="i-cpu" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></symbol>
+<symbol id="i-file-text" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+<symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></symbol>
+<symbol id="i-shield-alert" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></symbol>
+<symbol id="i-shield-check" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-loader-circle" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+<symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></symbol>
+<symbol id="i-flask-conical" viewBox="0 0 24 24"><path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2"/><path d="M6.453 15h11.094"/><path d="M8.5 2h7"/></symbol>
+<symbol id="i-bug" viewBox="0 0 24 24"><path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+<symbol id="i-circle-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
+<symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+<symbol id="i-terminal" viewBox="0 0 24 24"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></symbol>
+<symbol id="i-external-link" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+<symbol id="i-layout-dashboard" viewBox="0 0 24 24"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/></symbol>
+<symbol id="i-quote" viewBox="0 0 24 24"><path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/></symbol>
+</svg>
 
-<div class="header">
-  <div class="logo">
-    <div class="logo-icon">🔬</div>
-    <div>
-      <div class="logo-text">HeteroScan</div>
-      <div class="logo-sub">Heterogeneous Graph + Ensemble Classifier + LLM Analysis</div>
-    </div>
-  </div>
-  <div class="header-right">
-    <div class="status-dot"></div>
-    <span>System Online</span>
-    <span style="color:var(--border2)">|</span>
-    <span>Ensemble: Loaded</span>
-    <span style="color:var(--border2)">|</span>
-    <span>LLM: Ready</span>
-  </div>
-</div>
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+  <header class="top">
+    <a class="word" href="#main"><span class="mk"><svg class="i" aria-hidden="true"><use href="#i-scan-search"/></svg></span>HeteroScan</a>
+    <nav aria-label="Primary">
+      <a class="pill" href="#analyze" data-nav="analyze" aria-label="Analyze" aria-current="page"><svg class="i" aria-hidden="true"><use href="#i-scan"/></svg><span>Analyze</span></a>
+      <a class="pill" href="#about" data-nav="about" aria-label="About"><svg class="i" aria-hidden="true"><use href="#i-info"/></svg><span>About</span></a>
+      <a class="pill" href="#help" data-nav="help" aria-label="Help"><svg class="i" aria-hidden="true"><use href="#i-circle-help"/></svg><span>Help</span></a>
+      <span class="nav-sep" aria-hidden="true"></span>
+      <a class="pill" href="#cite" data-paper aria-label="Paper"><svg class="i" aria-hidden="true"><use href="#i-book-open"/></svg><span>Paper</span></a>
+      <a class="pill" href="https://github.com/Ama-Andam/heteroscan" data-repo aria-label="GitHub"><svg class="i" aria-hidden="true"><use href="#i-github"/></svg><span>GitHub</span></a>
+      <span class="pill health" data-health role="status"><span data-health-label><span class="hl-pre">Backend </span><span class="hl-word">checking</span></span></span>
+    </nav>
+  </header>
 
-<div class="tabs">
-  <div class="tab active" onclick="showTab('analysis')">Analysis</div>
-  <div class="tab" onclick="showTab('info')">How It Works</div>
-  <div class="tab" onclick="showTab('help')">Help</div>
-</div>
+  <main id="main" class="bento">
+    <div class="view" data-view="analyze">
+    <section class="t t-ink hero" aria-labelledby="hero-h">
+      <p class="lbl"><svg class="i" aria-hidden="true"><use href="#i-scan"/></svg>Behavioral malware analysis</p>
+      <h1 id="hero-h" tabindex="-1" data-view-title>Run it. Graph it. Read why.</h1>
+      <p><b>HeteroScan</b> detonates a sample in a sandbox, models every action as a typed graph, and explains the verdict in plain language.</p>
+    </section>
+    <section class="t pipe" aria-labelledby="pipe-h">
+      <h2 id="pipe-h" class="lbl">Pipeline</h2>
+      <ol class="steps">
+        <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-box"/></svg></span><span><b>CAPE sandbox</b><small>Runs the sample, records behavior</small></span></li>
+        <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-waypoints"/></svg></span><span><b>Heterogeneous graph</b><small>Processes, APIs, files, keys, hosts</small></span></li>
+        <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-layers"/></svg></span><span><b>Ensemble classifier + LLM</b><small>Verdict, then explanation</small></span></li>
+      </ol>
+    </section>
 
-<!-- ANALYSIS TAB -->
-<div id="tab-analysis" class="main">
-  <div class="card">
-    <div class="card-header"><span class="card-icon">📁</span><span class="card-title">Submit Sample for Analysis</span></div>
-    <div class="upload-area" id="uploadZone">
-      <div class="upload-icon">🛡️</div>
-      <div class="upload-text">Drag & drop a Windows executable here</div>
-      <div class="upload-sub">Supported: .exe, .dll, .bin — Max 30MB</div>
-      <div id="fileBadge" class="hidden"></div>
-    </div>
-    <input type="file" id="fileInput" style="display:none" accept=".exe,.dll,.bin">
-    <div class="btn-row">
-      <button class="btn btn-ghost" onclick="document.getElementById('fileInput').click()">Browse File</button>
-      <button class="btn btn-primary" id="analyzeBtn" onclick="submitFile()" disabled>Analyze Sample</button>
-      <span class="demo-label">Or try a pre-analyzed example:</span>
-      <button class="btn btn-ghost" onclick="loadReport(33373)">njRAT</button>
-      <button class="btn btn-ghost" onclick="loadReport(33184)">AsyncRAT</button>
-      <button class="btn btn-ghost" onclick="loadReport(33324)">XWorm</button>
-      <button class="btn btn-ghost" onclick="loadReport(33428)">NanoCore</button>
-    </div>
-  </div>
-
-  <div class="card hidden" id="progressCard">
-    <div class="card-header"><span class="card-icon">⏳</span><span class="card-title">Analysis Pipeline</span></div>
-    <div class="step-list">
-      <div class="step"><div class="step-dot" id="s1">1</div><div class="step-label">Submit to CAPE</div></div>
-      <div class="step"><div class="step-dot" id="s2">2</div><div class="step-label">Sandbox Execution</div></div>
-      <div class="step"><div class="step-dot" id="s3">3</div><div class="step-label">Build Graph</div></div>
-      <div class="step"><div class="step-dot" id="s4">4</div><div class="step-label">Ensemble Classification</div></div>
-      <div class="step"><div class="step-dot" id="s5">5</div><div class="step-label">LLM Explanation</div></div>
-    </div>
-    <div class="progress-bar-wrap" style="margin-top:16px"><div class="progress-bar"></div></div>
-    <div class="status-text" id="statusMsg">Initializing...</div>
-  </div>
-
-  <div id="results" class="hidden">
-    <div id="verdictBanner" class="verdict-banner">
-      <div class="verdict-label" id="verdictLabel">-</div>
-      <div class="verdict-conf" id="verdictConf">-</div>
-      <div id="capeDetect"></div>
-    </div>
-
-    <div class="stats-grid">
-      <div class="stat-box hi"><div class="stat-val" id="sProc">-</div><div class="stat-lbl">Processes</div></div>
-      <div class="stat-box hi"><div class="stat-val" id="sApi">-</div><div class="stat-lbl">API Calls</div></div>
-      <div class="stat-box"><div class="stat-val" id="sFile">-</div><div class="stat-lbl">Files</div></div>
-      <div class="stat-box"><div class="stat-val" id="sReg">-</div><div class="stat-lbl">Registry Keys</div></div>
-      <div class="stat-box hi"><div class="stat-val" id="sNet">-</div><div class="stat-lbl">Network Conn.</div></div>
-    </div>
-
-    <div class="two-col">
-      <div class="card">
-        <div class="card-header"><span class="card-icon">🕸️</span><span class="card-title">Behavioral Graph</span></div>
-        <canvas id="graphCanvas" class="graph-canvas"></canvas>
-      </div>
-      <div class="card">
-        <div class="card-header"><span class="card-icon">📊</span><span class="card-title">Node Distribution</span></div>
-        <div class="chart-wrap"><canvas id="nodeChart"></canvas></div>
-        <div style="margin-top:16px">
-          <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Ensemble Confidence</div>
-          <div style="background:var(--bg2);border-radius:6px;height:8px;overflow:hidden;">
-            <div id="confBar" style="height:100%;border-radius:6px;background:linear-gradient(90deg,#ff4500,#ff6b35);transition:width 1s ease;width:0%"></div>
-          </div>
-          <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--text3)">
-            <span>0%</span><span id="confPct" style="color:var(--accent);font-weight:600">-</span><span>100%</span>
-          </div>
+    <section class="t an" id="analyze" aria-labelledby="an-h">
+      <h2 id="an-h">Analyze a sample</h2>
+      <label class="drop" data-drop>
+        <input class="file-input" type="file" data-file aria-describedby="drop-hint">
+        <svg class="i" aria-hidden="true"><use href="#i-upload"/></svg>
+        <strong>Drop a file, or click to choose</strong>
+        <span id="drop-hint">Windows executable (.exe or .dll). A run takes a few minutes.</span>
+        <span data-filename></span>
+      </label>
+      <div class="an-row">
+        <button class="btn" type="button" data-analyze disabled><span class="btn-label">Analyze sample</span><svg class="i btn-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
+        <div class="status-wrap">
+          <p class="status" data-analyze-status role="status" aria-live="polite">Choose a file, or open one of the finished reports.</p>
+          <span class="elapsed" data-elapsed aria-hidden="true"></span>
         </div>
       </div>
-    </div>
-
-    <div class="two-col">
-      <div class="card">
-        <div class="card-header"><span class="card-icon">⚙️</span><span class="card-title">Spawned Processes</span></div>
-        <div class="tag-list" id="procList"><span style="color:var(--text3);font-size:12px">No processes observed</span></div>
+      <ol class="stepper" data-stepper aria-label="Analysis progress" hidden>
+        <li data-state="todo"><span class="st-dot"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg></span><span class="st-label">Upload<span class="st-sr sr-only"></span></span></li>
+        <li data-state="todo"><span class="st-dot"><svg class="i" aria-hidden="true"><use href="#i-box"/></svg></span><span class="st-label">Sandbox<span class="st-sr sr-only"></span></span></li>
+        <li data-state="todo"><span class="st-dot"><svg class="i" aria-hidden="true"><use href="#i-waypoints"/></svg></span><span class="st-label">Graph<span class="st-sr sr-only"></span></span></li>
+        <li data-state="todo"><span class="st-dot"><svg class="i" aria-hidden="true"><use href="#i-layers"/></svg></span><span class="st-label">Classify<span class="st-sr sr-only"></span></span></li>
+        <li data-state="todo"><span class="st-dot"><svg class="i" aria-hidden="true"><use href="#i-sparkles"/></svg></span><span class="st-label">Explain<span class="st-sr sr-only"></span></span></li>
+      </ol>
+    </section>
+    <section class="t demos-t" aria-labelledby="dm-h">
+      <h2 id="dm-h">Or open a finished report</h2>
+      <div class="demos">
+        <button type="button" data-demo="33373" aria-pressed="false"><span class="demo-name">njRAT</span><span class="demo-id">Task 33373</span></button>
+        <button type="button" data-demo="33184" aria-pressed="false"><span class="demo-name">AsyncRAT</span><span class="demo-id">Task 33184</span></button>
+        <button type="button" data-demo="33324" aria-pressed="false"><span class="demo-name">XWorm</span><span class="demo-id">Task 33324</span></button>
+        <button type="button" data-demo="33428" aria-pressed="false"><span class="demo-name">NanoCore</span><span class="demo-id">Task 33428</span></button>
       </div>
-      <div class="card">
-        <div class="card-header"><span class="card-icon">🌐</span><span class="card-title">C2 Candidates</span></div>
-        <div class="tag-list" id="hostList"><span style="color:var(--text3);font-size:12px">No network connections detected</span></div>
+    </section>
+
+    <div class="res" id="report" data-results data-verdict hidden>
+      <section class="t verdict-t" aria-labelledby="v-h">
+        <p class="lbl">Verdict</p>
+        <div>
+          <svg class="i big" data-verdict-icon aria-hidden="true"><use href="#i-shield-alert"/></svg>
+          <h2 id="v-h" class="vword" data-f="verdict"></h2>
+          <p class="cape" data-cape hidden>CAPE detection <b data-f="cape"></b></p>
+        </div>
+        <div class="vfoot"><span><span data-f="source-label">Family</span> <b data-f="source"></b></span><span>Task <b data-f="task"></b></span></div>
+      </section>
+      <section class="t conf-t" aria-labelledby="c-h">
+        <h3 id="c-h" class="lbl">Ensemble confidence</h3>
+        <p class="big-num"><span data-f="confidence"></span><small>%</small></p>
+        <div class="meter" data-gauge role="meter" aria-labelledby="c-h" aria-valuemin="0" aria-valuemax="100"><span></span></div>
+      </section>
+      <section class="t clf-t" aria-labelledby="k-h">
+        <h3 id="k-h" class="lbl">Classifier</h3>
+        <p class="clf" data-f="classifier"></p>
+      </section>
+      <dl class="t stats-t" aria-label="Behavior graph size">
+        <div><dt>Processes</dt><dd data-stat="processes"></dd></div>
+        <div><dt>API calls</dt><dd data-stat="api_calls"></dd></div>
+        <div><dt>Files</dt><dd data-stat="files"></dd></div>
+        <div><dt>Registry keys</dt><dd data-stat="registry_keys"></dd></div>
+        <div><dt>Connections</dt><dd data-stat="network_connections"></dd></div>
+      </dl>
+
+      <section class="t graph-t" aria-labelledby="g-h">
+        <div class="graph-side">
+          <h3 id="g-h">Behavior graph</h3>
+          <p>Every entity type from this run, linked to the processes that touched it. Node size grows with the count. Up to eight neighbors are drawn per type; the number is the full count.</p>
+          <p class="lbl">Edge types</p>
+          <ul class="edge-chips" aria-label="Edge types">
+            <li>spawns</li><li>calls</li><li>reads_file</li><li>writes_file</li><li>reads_reg</li><li>writes_reg</li><li>connects</li>
+          </ul>
+        </div>
+        <div class="graph-box" data-graph></div>
+      </section>
+
+      <section class="t ioc-t ioc-tall" aria-labelledby="l-proc"><div class="ioc-h"><h3 id="l-proc"><svg class="i" aria-hidden="true"><use href="#i-cpu"/></svg>Processes</h3><span class="cnt" data-count="processes"></span></div><ul class="ioc-list" data-list="processes"></ul></section>
+      <section class="t ioc-t" aria-labelledby="l-net"><div class="ioc-h"><h3 id="l-net"><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg>Network and C2</h3><span class="cnt" data-count="network"></span></div><ul class="ioc-list" data-list="network"></ul></section>
+      <section class="t ioc-t" aria-labelledby="l-file"><div class="ioc-h"><h3 id="l-file"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg>Files written</h3><span class="cnt" data-count="files"></span></div><ul class="ioc-list" data-list="files"></ul></section>
+      <section class="t ioc-t ioc-wide" aria-labelledby="l-reg"><div class="ioc-h"><h3 id="l-reg"><svg class="i" aria-hidden="true"><use href="#i-database"/></svg>Registry</h3><span class="cnt" data-count="registry"></span></div><ul class="ioc-list" data-list="registry"></ul></section>
+
+      <section class="t ex-t" aria-labelledby="ex-h">
+        <div class="ex-side">
+          <h2 id="ex-h">Explanation</h2>
+          <span class="ai"><svg class="i" aria-hidden="true"><use href="#i-sparkles"/></svg>AI-generated</span>
+          <p>A language model wrote this from the sandbox trace. Check it against the indicators.</p>
+        </div>
+        <article class="md" data-md></article>
+      </section>
+    </div>
+
+    </div>
+
+    <div class="view" data-view="about" hidden>
+    <div class="sec-h">
+      <h1 id="about-title" tabindex="-1" data-view-title>About HeteroScan</h1>
+      <p>A post-infection behavioral analysis system built for academic research.</p>
+    </div>
+    <section class="t info-t span-7" aria-labelledby="how-h">
+      <h3 id="how-h"><svg class="i" aria-hidden="true"><use href="#i-scan"/></svg>How it works</h3>
+      <ol class="flow">
+        <li><span><b>Sample upload</b><span>A Windows PE executable is submitted through this page.</span></span></li>
+        <li><span><b>CAPE sandbox</b><span>The sample runs in an isolated Windows 10 virtual machine while CAPE records its processes, API calls, file and registry activity, and network traffic.</span></span></li>
+        <li><span><b>Graph builder</b><span>The trace becomes a heterogeneous graph, with a typed node for each entity and a typed edge for each action.</span></span></li>
+        <li><span><b>Ensemble classifier</b><span>Random Forest, Extra Trees and XGBoost vote on structural features of the graph to produce the verdict and confidence.</span></span></li>
+        <li><span><b>LLM explanation</b><span>A large language model reads the evidence and writes the report shown with each result.</span></span></li>
+      </ol>
+    </section>
+    <section class="t info-t span-5" aria-labelledby="schema-h">
+      <h3 id="schema-h"><svg class="i" aria-hidden="true"><use href="#i-waypoints"/></svg>Graph node types</h3>
+      <dl class="nodes">
+        <div><dt>Process</dt><dd>Each process observed during execution. Spawn edges link parents to children.</dd></div>
+        <div><dt>API call</dt><dd>Windows API functions called by processes, the main behavioral signal.</dd></div>
+        <div><dt>File</dt><dd>Files read or written. Persistence often shows up here.</dd></div>
+        <div><dt>Registry key</dt><dd>Keys accessed. Malware commonly writes to Run keys to survive reboots.</dd></div>
+        <div><dt>Network</dt><dd>Endpoints contacted, such as C2 servers and exfiltration targets.</dd></div>
+      </dl>
+      <p>Seven typed edges connect them: spawns, calls, reads_file, writes_file, reads_reg, writes_reg and connects.</p>
+    </section>
+    <section class="t info-t span-5" aria-labelledby="verdict-h">
+      <h3 id="verdict-h"><svg class="i" aria-hidden="true"><use href="#i-shield-check"/></svg>Reading the verdict</h3>
+      <p>The verdict comes from a voting ensemble of Random Forest, Extra Trees and XGBoost classifiers trained on structural features of behavioral graphs. Confidence reflects how strongly the ensemble agrees.</p>
+      <p>Because the classifier reads graph structure rather than signatures or file hashes, it can flag new variants that behave like known families.</p>
+    </section>
+    <section class="t info-t span-7" aria-labelledby="attck-h">
+      <h3 id="attck-h"><svg class="i" aria-hidden="true"><use href="#i-target"/></svg>MITRE ATT&amp;CK techniques it looks for</h3>
+      <ul class="attck">
+        <li><code>T1055</code><span><b>Process injection</b><span>NtProtectVirtualMemory and LdrLoadDll call patterns in the graph.</span></span></li>
+        <li><code>T1547</code><span><b>Boot or logon autostart</b><span>Writes to the HKCU and HKLM Run registry keys.</span></span></li>
+        <li><code>T1059</code><span><b>Command and scripting interpreter</b><span>Spawn edges to cmd.exe and powershell.exe.</span></span></li>
+        <li><code>T1071</code><span><b>Application layer protocol (C2)</b><span>Connections to non-standard ports and unknown hosts.</span></span></li>
+      </ul>
+    </section>
+
+    </div>
+
+    <div class="view" data-view="help" hidden>
+    <div class="sec-h">
+      <h1 id="help-title" tabindex="-1" data-view-title>Help</h1>
+      <p>What to do, what to expect, and what not to upload.</p>
+    </div>
+    <section class="t info-t span-7" aria-labelledby="use-h">
+      <h3 id="use-h"><svg class="i" aria-hidden="true"><use href="#i-circle-help"/></svg>Analyzing a sample</h3>
+      <ol class="flow">
+        <li><span><b>Add a file</b><span>Drop a Windows executable (.exe or .dll) on the upload area, or click it to choose one.</span></span></li>
+        <li><span><b>Start the run</b><span>Press Analyze sample. The file goes to the CAPE sandbox and runs in an isolated virtual machine.</span></span></li>
+        <li><span><b>Wait for the report</b><span>The progress tracker shows each stage. A run takes a few minutes.</span></span></li>
+        <li><span><b>Review the result</b><span>Read the verdict, the behavior graph, the indicators and the AI-generated explanation.</span></span></li>
+      </ol>
+      <p style="margin-top:14px">If the status pill says offline, the sandbox is not running right now. The four finished reports still work.</p>
+      <a class="back" href="#analyze"><svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg>Go to Analyze</a>
+    </section>
+    <section class="t info-t span-5 safety" aria-labelledby="safe-h">
+      <h3 id="safe-h"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg>Safety and privacy</h3>
+      <p>Samples run in an isolated Windows 10 virtual machine.</p>
+      <p>Do not upload files that contain personal or sensitive information.</p>
+      <p>Uploaded samples are used only for behavioral analysis and are not shared.</p>
+    </section>
+
+    </div>
+
+    <footer class="t t-ink foot" id="cite">
+      <div>
+        <p class="lbl">Citation</p>
+        <p class="cite">E. Andam, E. S. Grant, and N. Kaabouch. What Malware Actually Does: An Empirical Analysis of Post-Infection Behavior Across Malware Families. <i>IEEE</i>, 2026.</p>
+        <p class="research">Part of a master's thesis at the University of North Dakota, <i>Malware Detection and Behavioral Analysis in IoT Environments: A Multi-Study Deep Learning Approach</i>.</p>
       </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header"><span class="card-icon">📈</span><span class="card-title">API Call Category Breakdown</span></div>
-      <div style="height:160px"><canvas id="apiChart"></canvas></div>
-    </div>
-
-    <div class="card">
-      <div class="card-header"><span class="card-icon">🤖</span><span class="card-title">AI-Generated Behavioral Analysis</span></div>
-      <div class="llm-output" id="llmOutput">Loading analysis...</div>
-    </div>
-  </div>
+      <div>
+        <p class="lbl">Affiliation</p>
+        <p class="aff">AIR Center and School of EECS, University of North Dakota</p>
+        <a class="repo" href="https://github.com/Ama-Andam/heteroscan" data-repo><svg class="i" aria-hidden="true"><use href="#i-github"/></svg>View the repo</a>
+      </div>
+    </footer>
+  </main>
 </div>
+<script>/* HeteroScan front end.
+   Backend contract: POST {API}/submit (FormData "file") -> {task_id} | {error}
+                     GET  {API}/task/{id}/status -> {status}, done when status === "reported"
+                     GET  {API}/task/{id}/report -> report object
+                     GET  {API}/health -> 2xx when online
+   Every backend request sends {"ngrok-skip-browser-warning":"true"}.
+   All report data is rendered with textContent / createElement. No HTML strings from data. */
+(() => {
+  "use strict";
+  const HDR = { "ngrok-skip-browser-warning": "true" };
+  const DEMO_FAMILY = { 33373: "njRAT", 33184: "AsyncRAT", 33324: "XWorm", 33428: "NanoCore" };
+  const INITIAL_DEMO = 33373;
+  const LIMIT = 6;
+  const POLL_MS = 5000;
+  const POLL_MAX_MS = 20 * 60 * 1000;
+  const MAX_POLL_ERRORS = 6;
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const base = String(API).replace(/\/+$/, "");
 
-<!-- HOW IT WORKS TAB -->
-<div id="tab-info" class="main hidden">
-  <div class="card">
-    <div class="card-header"><span class="card-icon">🔬</span><span class="card-title">About HeteroScan</span></div>
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const fmt = (n) => Number(n || 0).toLocaleString("en-US");
+  const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-    <div class="info-title">What is HeteroScan?</div>
-    <div class="info-text">
-      HeteroScan is a post-infection malware behavioral analysis system built for academic research. It combines three technologies: dynamic sandbox analysis via CAPE, heterogeneous graph neural networks (HAN), and large language model explanation via Claude. It addresses two key gaps in existing malware analysis research — the representation gap and the ground truth gap.
-    </div>
-
-    <div class="info-title">Analysis Pipeline</div>
-    <div class="pipe-row">
-      <div class="pipe-step"><div class="pipe-icon">📁</div><div class="pipe-title">Sample Upload</div><div class="pipe-text">PE executable submitted</div></div>
-      <div class="pipe-step"><div class="pipe-icon">🧪</div><div class="pipe-title">CAPE Sandbox</div><div class="pipe-text">Isolated Windows 10 VM execution</div></div>
-      <div class="pipe-step"><div class="pipe-icon">🕸️</div><div class="pipe-title">Graph Builder</div><div class="pipe-text">Heterogeneous behavioral graph</div></div>
-      <div class="pipe-step"><div class="pipe-icon">🧠</div><div class="pipe-title">HAN Model</div><div class="pipe-text">Graph attention network inference</div></div>
-      <div class="pipe-step"><div class="pipe-icon">🤖</div><div class="pipe-title">LLM Layer</div><div class="pipe-text">Natural language explanation</div></div>
-    </div>
-
-    <div class="info-title">Heterogeneous Graph Node Types</div>
-    <div class="info-grid">
-      <div class="info-card"><div class="info-card-icon">⚙️</div><div class="info-card-title">Process Nodes</div><div class="info-card-text">Each process observed during execution. Spawns edges connect parent to child processes.</div></div>
-      <div class="info-card"><div class="info-card-icon">📞</div><div class="info-card-title">API Call Nodes</div><div class="info-card-text">Windows API functions called by processes. The primary behavioral signal for detection.</div></div>
-      <div class="info-card"><div class="info-card-icon">📄</div><div class="info-card-title">File Nodes</div><div class="info-card-text">Files read or written during execution. Persistence mechanisms often involve file system changes.</div></div>
-      <div class="info-card"><div class="info-card-icon">🔑</div><div class="info-card-title">Registry Nodes</div><div class="info-card-text">Registry keys accessed. Malware commonly writes to Run keys for persistence.</div></div>
-      <div class="info-card"><div class="info-card-icon">🌐</div><div class="info-card-title">Network Nodes</div><div class="info-card-text">Network endpoints contacted — C2 servers, exfiltration targets, update servers.</div></div>
-      <div class="info-card"><div class="info-card-icon">🔗</div><div class="info-card-title">7 Edge Types</div><div class="info-card-text">spawns, calls, reads_file, writes_file, reads_reg, writes_reg, connects — typed relationships.</div></div>
-    </div>
-
-    <div class="info-title">MITRE ATT&CK Coverage</div>
-    <div class="mitre-grid">
-      <div class="mitre-card"><div class="mitre-id">T1055</div><div class="mitre-name">Process Injection</div><div class="mitre-desc">Detected via NtProtectVirtualMemory + LdrLoadDll API call patterns in the behavioral graph</div></div>
-      <div class="mitre-card"><div class="mitre-id">T1547</div><div class="mitre-name">Boot/Logon Autostart</div><div class="mitre-desc">Detected via HKCU\Run and HKLM\Run registry write edges in the graph</div></div>
-      <div class="mitre-card"><div class="mitre-id">T1059</div><div class="mitre-name">Command & Scripting</div><div class="mitre-desc">Detected via cmd.exe, powershell.exe process spawn edges</div></div>
-      <div class="mitre-card"><div class="mitre-id">T1071</div><div class="mitre-name">C2 Communication</div><div class="mitre-desc">Detected via network connection edges to non-standard ports and unknown IPs</div></div>
-    </div>
-
-    <div class="info-title" style="margin-top:24px">Research Context</div>
-    <div class="info-text">
-      This system is part of a master's thesis at the University of North Dakota titled "Malware Detection and Behavioral Analysis in IoT Environments: A Multi-Study Deep Learning Approach." Study 3 specifically addresses post-infection behavioral analysis using heterogeneous GNNs. The model is trained on 600+ samples across 20+ malware families including AsyncRAT, XWorm, njRAT, RedLine, AgentTesla, Vidar, Formbook, and more.
-    </div>
-  </div>
-</div>
-
-<!-- HELP TAB -->
-<div id="tab-help" class="main hidden">
-  <div class="card">
-    <div class="card-header"><span class="card-icon">❓</span><span class="card-title">Help & Documentation</span></div>
-
-    <div class="info-title">How to Analyze a Sample</div>
-    <div class="info-text">
-      1. Drag and drop a Windows executable (.exe, .dll) onto the upload zone, or click Browse File to select one from your computer.<br><br>
-      2. Click Analyze Sample to submit it to the CAPE sandbox. The file executes in an isolated Windows 10 virtual machine.<br><br>
-      3. Wait 3–5 minutes for sandbox execution and behavioral report generation.<br><br>
-      4. HeteroScan automatically builds a heterogeneous behavioral graph, runs ensemble classification, and generates an LLM explanation.<br><br>
-      5. Review the verdict, behavioral graph visualization, graph statistics, network connections, and AI-generated analysis report.
-    </div>
-
-    <div class="info-title">Pre-Analyzed Examples</div>
-    <div class="info-text">
-      Click any quick-load button to instantly view a pre-analyzed malware report:<br><br>
-      <strong style="color:var(--text)">njRAT</strong> — Remote access trojan with process injection and C2 beaconing on non-standard ports<br><br>
-      <strong style="color:var(--text)">AsyncRAT</strong> — .NET-based RAT with fileless execution, .NET framework enumeration, and port 777 C2<br><br>
-      <strong style="color:var(--text)">XWorm</strong> — Info-stealer with USB propagation, mutex creation, and encrypted C2 communication<br><br>
-      <strong style="color:var(--text)">RedLine</strong> — Credential stealer targeting browsers, crypto wallets, and system information
-    </div>
-
-    <div class="info-title">Understanding the Verdict</div>
-    <div class="info-text">
-      The MALICIOUS / BENIGN verdict is produced by a Voting Ensemble of Random Forest, Extra Trees, and XGBoost classifiers trained on 55 graph-derived structural features from 2,516 behavioral graphs across 37 malware families. The confidence score reflects ensemble agreement — scores above 90% indicate strong behavioral evidence.<br><br>
-      The ensemble classifier operates on the structural properties of the behavioral graph, not on signatures or hashes. This means it can detect previously unseen malware variants that exhibit known behavioral patterns.
-    </div>
-
-    <div class="info-title">Graph Visualization Guide</div>
-    <div class="info-text">
-      The behavioral graph shows relationships between entities observed during sandbox execution:<br><br>
-      🟠 Orange = Process nodes<br>
-      🔵 Blue = API call nodes<br>
-      🟢 Green = File nodes<br>
-      🟣 Purple = Registry key nodes<br>
-      🔴 Red = Network endpoint nodes<br><br>
-      Node size reflects the count of that entity type. Edges between the central process node and surrounding nodes represent behavioral relationships.
-    </div>
-
-    <div class="info-title" style="margin-top:24px">Safety & Privacy</div>
-    <div class="warn-box">
-      ⚠️ HeteroScan executes uploaded files in an isolated sandbox environment with no internet access. Do not upload files containing sensitive personal information. All execution happens in a network-isolated Windows 10 VM. Uploaded samples are used solely for behavioral analysis and are not shared externally.
-    </div>
-  </div>
-</div>
-
-<script>
-const API = "https://77fd-134-129-201-10.ngrok-free.app";
-const HDR = {"ngrok-skip-browser-warning":"1"};
-let selectedFile=null, pollTimer=null, nodeChartInst=null, apiChartInst=null;
-
-function showTab(t){
-  ["analysis","info","help"].forEach((id,i)=>{
-    document.getElementById("tab-"+id).classList.toggle("hidden",id!==t);
-    document.querySelectorAll(".tab")[i].classList.toggle("active",id===t);
-  });
-}
-
-const zone=document.getElementById("uploadZone");
-zone.addEventListener("dragover",e=>{e.preventDefault();zone.classList.add("over");});
-zone.addEventListener("dragleave",()=>zone.classList.remove("over"));
-zone.addEventListener("drop",e=>{e.preventDefault();zone.classList.remove("over");if(e.dataTransfer.files[0])setFile(e.dataTransfer.files[0]);});
-zone.addEventListener("click",()=>document.getElementById("fileInput").click());
-document.getElementById("fileInput").addEventListener("change",e=>{if(e.target.files[0])setFile(e.target.files[0]);});
-
-function setFile(f){
-  selectedFile=f;
-  const b=document.getElementById("fileBadge");
-  b.className="file-badge";b.innerHTML="📄 "+f.name+" &nbsp; "+(f.size/1024).toFixed(1)+" KB";
-  document.getElementById("analyzeBtn").disabled=false;
-}
-
-function setStep(n){
-  for(let i=1;i<=5;i++){
-    const el=document.getElementById("s"+i);
-    if(i<n){el.className="step-dot done";el.textContent="✓";}
-    else if(i===n){el.className="step-dot active";el.textContent=i;}
-    else{el.className="step-dot";el.textContent=i;}
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
   }
-}
+  function icon(name, cls) {
+    const svg = document.createElementNS(SVGNS, "svg");
+    svg.setAttribute("class", "i" + (cls ? " " + cls : ""));
+    svg.setAttribute("aria-hidden", "true");
+    const use = document.createElementNS(SVGNS, "use");
+    use.setAttribute("href", "#i-" + name);
+    svg.append(use);
+    return svg;
+  }
 
-async function submitFile(){
-  if(!selectedFile)return;
-  const fd=new FormData();fd.append("file",selectedFile);
-  document.getElementById("progressCard").classList.remove("hidden");
-  document.getElementById("results").classList.add("hidden");
-  setStep(1);document.getElementById("statusMsg").textContent="Submitting sample to CAPE sandbox...";
-  try{
-    setStep(2);document.getElementById("statusMsg").textContent="Submitting to sandbox...";
-    const sub=await fetch(API+"/submit",{method:"POST",body:fd,headers:{"ngrok-skip-browser-warning":"true"}});
-    const sd=await sub.json();
-    if(sd.error){document.getElementById("statusMsg").textContent="Error: "+sd.error;return;}
-    pollStatus(sd.task_id);
-  }catch(e){document.getElementById("statusMsg").textContent="Error: "+e.message;}
-}
-function pollStatus(taskId){
-  document.getElementById("statusMsg").textContent="Task #"+taskId+": Executing in sandbox VM... (2-3 min)";
-  pollTimer=setInterval(async()=>{
-    try{
-      const r=await fetch(API+"/task/"+taskId+"/status",{headers:{"ngrok-skip-browser-warning":"true"}});
-      const d=await r.json();
-      if(d.status==="reported"){clearInterval(pollTimer);setStep(3);
-        document.getElementById("statusMsg").textContent="Building graph and classifying...";
-        setTimeout(async()=>{
-          const rr=await fetch(API+"/task/"+taskId+"/report",{headers:{"ngrok-skip-browser-warning":"true"}});
-          const dd=await rr.json();
-          setStep(4);await new Promise(res=>setTimeout(res,300));
-          setStep(5);await new Promise(res=>setTimeout(res,300));
-          showResults(dd);
-        },500);}
-      else if(d.status&&d.status.includes("failed")){clearInterval(pollTimer);document.getElementById("statusMsg").textContent="Analysis failed.";}
-    }catch(e){}
-  },5000);
-}
-async function loadReport(taskId){
-  document.getElementById("progressCard").classList.remove("hidden");
-  document.getElementById("results").classList.add("hidden");
-  document.getElementById("statusMsg").textContent="Loading pre-analyzed report...";
-  setStep(2);await new Promise(res=>setTimeout(res,300));
-  setStep(3);await new Promise(res=>setTimeout(res,300));
-  setStep(4);await new Promise(res=>setTimeout(res,300));
-  setStep(5);await new Promise(res=>setTimeout(res,300));
-  try{
-    const r=await fetch("https://ama-andam.github.io/heteroscan/demo_"+taskId+".json");
-    const d=await r.json();
-    showResults(d);
-  }catch(e){document.getElementById("statusMsg").textContent="Error loading report: "+e.message;}
-}
-function showResults(d){
-  document.getElementById("progressCard").classList.add("hidden");
-  document.getElementById("results").classList.remove("hidden");
-  const isMal=d.verdict==="MALICIOUS";
-  const banner=document.getElementById("verdictBanner");
-  banner.className="verdict-banner "+(isMal?"verdict-malicious":"verdict-benign");
-  document.getElementById("verdictLabel").textContent=d.verdict;
-  document.getElementById("verdictConf").textContent="Ensemble Confidence: "+d.ensemble_confidence+"%";
-  document.getElementById("capeDetect").innerHTML=d.cape_detection?'<div class="cape-pill">🔍 CAPE: '+d.cape_detection+'</div>':"";
-  const gs=d.graph_stats||{};
-  document.getElementById("sProc").textContent=gs.processes||0;
-  document.getElementById("sApi").textContent=gs.api_calls||0;
-  document.getElementById("sFile").textContent=gs.files||0;
-  document.getElementById("sReg").textContent=gs.registry_keys||0;
-  document.getElementById("sNet").textContent=gs.network_connections||0;
-  document.getElementById("confBar").style.width=d.ensemble_confidence+"%";
-  document.getElementById("confPct").textContent=d.ensemble_confidence+"%";
-  const pl=document.getElementById("procList");pl.innerHTML="";
-  (d.process_names||[]).forEach(p=>{const t=document.createElement("span");t.className="tag tag-process";t.textContent=p.replace(/^\d+_/,"");pl.appendChild(t);});
-  if(!(d.process_names||[]).length)pl.innerHTML='<span style="color:var(--text3);font-size:12px">No processes observed</span>';
-  const hl=document.getElementById("hostList");hl.innerHTML="";
-  if(d.network_hosts&&d.network_hosts.length){d.network_hosts.forEach(h=>{const t=document.createElement("span");t.className="tag tag-host";t.textContent=h;hl.appendChild(t);});}
-  else hl.innerHTML='<span style="color:var(--text3);font-size:12px">No external connections detected</span>';
-  document.getElementById("llmOutput").textContent=d.llm_explanation||"No explanation available";
-  drawGraph(gs);drawNodeChart(gs);drawApiChart(gs);
-  document.getElementById("results").scrollIntoView({behavior:"smooth"});
-}
-
-function drawGraph(gs){
-  const canvas=document.getElementById("graphCanvas");
-  const ctx=canvas.getContext("2d");
-  const dpr=window.devicePixelRatio||1;
-  canvas.width=canvas.offsetWidth*dpr;canvas.height=300*dpr;
-  ctx.scale(dpr,dpr);
-  const W=canvas.offsetWidth,H=300;
-  ctx.fillStyle="#0d1117";ctx.fillRect(0,0,W,H);
-  const nodes=[
-    {l:"Process",n:gs.processes||1,c:"#ff4500",x:0.5,y:0.2},
-    {l:"API",n:Math.min(gs.api_calls||1,20),c:"#4f9eff",x:0.18,y:0.55},
-    {l:"File",n:Math.min(gs.files||1,10),c:"#00ff87",x:0.82,y:0.55},
-    {l:"Registry",n:Math.min(gs.registry_keys||1,15),c:"#cf8fff",x:0.35,y:0.85},
-    {l:"Network",n:Math.min(gs.network_connections||1,8),c:"#ff4f4f",x:0.65,y:0.85},
-  ];
-  const pos=nodes.map(n=>({...n,px:n.x*W,py:n.y*H}));
-  pos.forEach((a,i)=>{
-    if(i===0)return;
-    ctx.strokeStyle="rgba(255,255,255,0.05)";ctx.lineWidth=1;
-    ctx.beginPath();ctx.moveTo(pos[0].px,pos[0].py);ctx.lineTo(a.px,a.py);ctx.stroke();
-  });
-  pos.forEach(n=>{
-    const cnt=Math.min(n.n,8);
-    for(let i=0;i<cnt;i++){
-      const angle=(i/cnt)*Math.PI*2;
-      const nx=n.px+Math.cos(angle)*38,ny=n.py+Math.sin(angle)*38;
-      ctx.strokeStyle=n.c+"25";ctx.lineWidth=0.5;
-      ctx.beginPath();ctx.moveTo(n.px,n.py);ctx.lineTo(nx,ny);ctx.stroke();
-      ctx.fillStyle=n.c+"50";ctx.beginPath();ctx.arc(nx,ny,4,0,Math.PI*2);ctx.fill();
+  /* ---------- Safe Markdown renderer: headings, tables, lists, bold, em, code, rules ---------- */
+  const INLINE = /(`[^`]+`)|(\*\*(?:[^*]|\*(?!\*))+?\*\*)|(\*[^*\s](?:[^*]*[^*\s])?\*)|((?<![\w\\])_[^_\s](?:[^_]*[^_\s])?_(?!\w))/g;
+  function inline(parent, text) {
+    const re = new RegExp(INLINE.source, "g");
+    let last = 0, m;
+    while ((m = re.exec(text))) {
+      if (m.index > last) parent.append(text.slice(last, m.index));
+      const t = m[0];
+      if (m[1]) parent.append(el("code", null, t.slice(1, -1)));
+      else if (m[2]) { const s = el("strong"); inline(s, t.slice(2, -2)); parent.append(s); }
+      else { const e = el("em"); inline(e, t.slice(1, -1)); parent.append(e); }
+      last = m.index + t.length;
     }
-    const r=Math.max(18,Math.min(28,Math.log(n.n+1)*5));
-    ctx.shadowColor=n.c;ctx.shadowBlur=10;
-    ctx.fillStyle=n.c+"18";ctx.beginPath();ctx.arc(n.px,n.py,r,0,Math.PI*2);ctx.fill();
-    ctx.strokeStyle=n.c;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(n.px,n.py,r,0,Math.PI*2);ctx.stroke();
-    ctx.shadowBlur=0;
-    ctx.fillStyle=n.c;ctx.font="bold 10px monospace";ctx.textAlign="center";ctx.textBaseline="middle";
-    ctx.fillText(n.n>99?"99+":n.n,n.px,n.py);
-    ctx.fillStyle="#8892b0";ctx.font="9px sans-serif";ctx.fillText(n.l,n.px,n.py+r+11);
-  });
-}
+    if (last < text.length) parent.append(text.slice(last));
+  }
+  const splitRow = (l) => l.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+  function renderMarkdown(root, md) {
+    root.replaceChildren();
+    const lines = String(md || "").replace(/\r\n?/g, "\n").split("\n");
+    let i = 0, para = null, list = null;
+    while (i < lines.length) {
+      const t = lines[i].trim();
+      let m;
+      if (!t) { para = list = null; i++; continue; }
+      if ((m = t.match(/^(#{1,6})\s+(.*)$/))) {
+        para = list = null;
+        const h = el("h" + Math.min(6, m[1].length + 2), "md-h md-h" + m[1].length);
+        inline(h, m[2]); root.append(h); i++; continue;
+      }
+      if (/^(-{3,}|\*{3,}|_{3,})$/.test(t)) { para = list = null; root.append(el("hr", "md-hr")); i++; continue; }
+      if (t.startsWith("|") && i + 1 < lines.length && /^\|?\s*:?-{2,}/.test(lines[i + 1].trim())) {
+        para = list = null;
+        const wrap = el("div", "md-table");
+        wrap.tabIndex = 0;
+        wrap.setAttribute("role", "region");
+        wrap.setAttribute("aria-label", "Table, scrolls horizontally");
+        const table = el("table"), thead = el("thead"), hr = el("tr"), tb = el("tbody");
+        splitRow(t).forEach((c) => { const th = el("th"); th.scope = "col"; inline(th, c); hr.append(th); });
+        thead.append(hr); table.append(thead);
+        i += 2;
+        while (i < lines.length && lines[i].trim().startsWith("|")) {
+          const r = el("tr");
+          splitRow(lines[i]).forEach((c) => { const td = el("td"); inline(td, c); r.append(td); });
+          tb.append(r); i++;
+        }
+        table.append(tb); wrap.append(table); root.append(wrap); continue;
+      }
+      if ((m = t.match(/^([-*+]|\d+[.)])\s+(.*)$/))) {
+        const tag = /\d/.test(m[1][0]) ? "OL" : "UL";
+        if (!list || list.tagName !== tag) { para = null; list = el(tag.toLowerCase(), "md-list"); root.append(list); }
+        const li = el("li"); inline(li, m[2]); list.append(li); i++; continue;
+      }
+      list = null;
+      if (!para) { para = el("p", "md-p"); root.append(para); }
+      else para.append(el("br"));
+      inline(para, t);
+      i++;
+    }
+  }
 
-function drawNodeChart(gs){
-  if(nodeChartInst)nodeChartInst.destroy();
-  const ctx=document.getElementById("nodeChart").getContext("2d");
-  nodeChartInst=new Chart(ctx,{
-    type:"doughnut",
-    data:{labels:["Processes","API Calls","Files","Registry","Network"],
-    datasets:[{data:[gs.processes||0,gs.api_calls||0,gs.files||0,gs.registry_keys||0,gs.network_connections||0],
-    backgroundColor:["#ff450040","#4f9eff40","#00ff8740","#cf8fff40","#ff4f4f40"],
-    borderColor:["#ff4500","#4f9eff","#00ff87","#cf8fff","#ff4f4f"],borderWidth:1.5}]},
-    options:{responsive:true,maintainAspectRatio:true,
-    plugins:{legend:{labels:{color:"#8892b0",font:{size:10},boxWidth:10}}},cutout:"60%"}
-  });
-}
+  /* ---------- Report rendering ---------- */
+  const pickArr = (d, a, b) => {
+    if (Array.isArray(d[a]) && d[a].length) return d[a];
+    if (Array.isArray(d[b])) return d[b];
+    return Array.isArray(d[a]) ? d[a] : [];
+  };
+  const LISTS = {
+    processes: (d) => pickArr(d, "spawned_processes", "process_names").map((p) => String(p).replace(/^\d+_/, "")),
+    network: (d) => pickArr(d, "c2_candidates", "network_hosts").map(String),
+    files: (d) => (Array.isArray(d.files_written) ? d.files_written : []).map(String),
+    registry: (d) => (Array.isArray(d.registry_keys) ? d.registry_keys : []).map(String),
+  };
+  const EMPTY = {
+    processes: "No child processes observed",
+    network: "No outbound connections observed",
+    files: "No files written",
+    registry: "No registry keys recorded",
+  };
 
-function drawApiChart(gs){
-  if(apiChartInst)apiChartInst.destroy();
-  const ctx=document.getElementById("apiChart").getContext("2d");
-  const api=gs.api_calls||0;
-  const vals=[Math.floor(api*0.25),Math.floor(api*0.30),Math.floor(api*0.08),Math.floor(api*0.12),Math.floor(api*0.10),Math.floor(api*0.05),Math.floor(api*0.10)];
-  apiChartInst=new Chart(ctx,{
-    type:"bar",
-    data:{labels:["File I/O","Registry","Network","Process","Memory","Crypto","Other"],
-    datasets:[{data:vals,
-    backgroundColor:["#00ff8725","#cf8fff25","#ff4f4f25","#ff450025","#4f9eff25","#ffa50025","#88889925"],
-    borderColor:["#00ff87","#cf8fff","#ff4f4f","#ff4500","#4f9eff","#ffa500","#888899"],
-    borderWidth:1.5,borderRadius:4}]},
-    options:{responsive:true,maintainAspectRatio:false,
-    plugins:{legend:{display:false}},
-    scales:{x:{ticks:{color:"#8892b0",font:{size:10}},grid:{color:"#1e274415"}},
-    y:{ticks:{color:"#8892b0",font:{size:10}},grid:{color:"#1e274415"}}}}
+  function renderList(key, items) {
+    const ul = $(`[data-list="${key}"]`);
+    if (!ul) return;
+    ul.id = ul.id || "list-" + key;
+    ul.replaceChildren();
+    $$(`[data-count="${key}"]`).forEach((n) => (n.textContent = fmt(items.length)));
+    const prev = $(`.more-btn[data-for="${key}"]`);
+    if (prev) prev.remove();
+    if (!items.length) { ul.append(el("li", "ioc ioc-empty", EMPTY[key])); return; }
+    items.forEach((v, idx) => {
+      const li = el("li", "ioc");
+      if (idx >= LIMIT) li.hidden = true;
+      li.append(el("span", "ioc-n", String(idx + 1).padStart(2, "0")));
+      const code = el("code", "ioc-v");
+      const mm = key === "network" ? v.match(/^(.*?)(:\d+)$/) : null;
+      if (mm) { code.append(mm[1]); code.append(el("span", "ioc-port", mm[2])); }
+      else {
+        // Offer line breaks after path separators so long keys wrap at "\" instead of mid-word.
+        v.split(/(?<=[\\/])/).forEach((part, k) => { if (k) code.append(document.createElement("wbr")); code.append(part); });
+      }
+      li.append(code);
+      ul.append(li);
+    });
+    if (items.length > LIMIT) {
+      const btn = el("button", "more-btn");
+      btn.type = "button";
+      btn.dataset.for = key;
+      btn.setAttribute("aria-controls", ul.id);
+      btn.setAttribute("aria-expanded", "false");
+      const label = el("span", "more-label", `+${items.length - LIMIT} more`);
+      btn.append(label, icon("chevron-down", "more-chev"));
+      btn.addEventListener("click", () => {
+        const open = btn.getAttribute("aria-expanded") !== "true";
+        btn.setAttribute("aria-expanded", String(open));
+        Array.from(ul.children).forEach((li, idx) => { if (idx >= LIMIT) li.hidden = !open; });
+        label.textContent = open ? "Show fewer" : `+${items.length - LIMIT} more`;
+      });
+      ul.after(btn);
+    }
+  }
+
+  const setText = (key, v) => $$(`[data-f="${key}"]`).forEach((n) => (n.textContent = v));
+
+  function renderReport(d, source) {
+    const verdict = String(d.verdict || "Unknown");
+    const v = verdict.toLowerCase();
+    const conf = Math.max(0, Math.min(100, Number(d.ensemble_confidence) || 0));
+    $$("[data-verdict]").forEach((n) => (n.dataset.verdict = v));
+    $$("[data-verdict-icon] use").forEach((u) =>
+      u.setAttribute("href", v === "malicious" ? "#i-shield-alert" : v === "benign" ? "#i-shield-check" : "#i-scan"));
+    setText("verdict", verdict.charAt(0) + verdict.slice(1).toLowerCase());
+    setText("confidence", conf.toFixed(1));
+    setText("classifier", d.classifier || "Unknown classifier");
+    setText("source-label", source.kind);
+    setText("source", source.name);
+    setText("task", String(d.task_id ?? source.task ?? ""));
+    $$("[data-gauge]").forEach((g) => {
+      g.setAttribute("aria-valuenow", conf.toFixed(1));
+      g.setAttribute("aria-valuetext", conf.toFixed(1) + " percent");
+      if (reduceMotion()) { g.style.setProperty("--pct", String(conf)); return; }
+      g.style.setProperty("--pct", "0");
+      requestAnimationFrame(() => requestAnimationFrame(() => g.style.setProperty("--pct", String(conf))));
+    });
+    const cape = d.cape_detection ? String(d.cape_detection) : "";
+    $$("[data-cape]").forEach((n) => (n.hidden = !cape));
+    setText("cape", cape);
+    const gs = d.graph_stats || {};
+    renderGraph(gs);
+    ["processes", "api_calls", "files", "registry_keys", "network_connections"].forEach((k) =>
+      $$(`[data-stat="${k}"]`).forEach((n) => (n.textContent = fmt(gs[k]))));
+    Object.keys(LISTS).forEach((k) => renderList(k, LISTS[k](d)));
+    $$("[data-md]").forEach((n) => renderMarkdown(n, d.llm_explanation || "No explanation was returned for this sample."));
+  }
+
+  /* ---------- Behavior graph drawing (SVG built with createElementNS) ---------- */
+  function svgEl(tag, attrs, text) {
+    const e = document.createElementNS(SVGNS, tag);
+    Object.keys(attrs || {}).forEach((k) => e.setAttribute(k, attrs[k]));
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  const LAYOUTS = {
+    wide: { w: 800, h: 330, hub: [400, 170], leafArc: [-150, -30], leafR: 60, spawnLabel: [400, 92],
+      types: { api: [165, 88], files: [635, 88], registry: [165, 250], network: [635, 250] } },
+    narrow: { w: 360, h: 424, hub: [180, 212], leafArc: [-35, 35], leafR: 54, spawnLabel: [262, 248],
+      types: { api: [78, 72], files: [282, 72], registry: [78, 352], network: [282, 352] } },
+  };
+  const GTYPES = [
+    { key: "api", stat: "api_calls", label: "API calls", edge: "Calls" },
+    { key: "files", stat: "files", label: "Files", edge: "Reads, writes" },
+    { key: "registry", stat: "registry_keys", label: "Registry keys", edge: "Reads, writes" },
+    { key: "network", stat: "network_connections", label: "Network", edge: "Connects" },
+  ];
+  let graphStats = null, graphLayout = "";
+  function renderGraph(gs) {
+    graphStats = gs;
+    const box = $("[data-graph]");
+    if (!box) return;
+    const name = box.clientWidth && box.clientWidth < 560 ? "narrow" : "wide";
+    graphLayout = name;
+    const L = LAYOUTS[name];
+    const n = (k) => Math.max(0, Number(gs[k]) || 0);
+    const rad = (c) => Math.min(30, 15 + 4 * Math.log10(c + 1));
+    const svg = svgEl("svg", { viewBox: "0 0 " + L.w + " " + L.h, role: "img", class: "graph-svg", "aria-labelledby": "graph-title" });
+    svg.append(svgEl("title", { id: "graph-title" },
+      "Behavior graph: " + fmt(n("processes")) + " processes, " + fmt(n("api_calls")) + " API calls, " + fmt(n("files")) +
+      " files, " + fmt(n("registry_keys")) + " registry keys and " + fmt(n("network_connections")) + " network connections."));
+    const gEdges = svgEl("g", { class: "g-edges" }), gLeaves = svgEl("g", {}), gNodes = svgEl("g", {}), gText = svgEl("g", {});
+    const hx = L.hub[0], hy = L.hub[1];
+    const fan = (cx, cy, count, a0, a1, R) => {
+      const k = Math.min(count, 8);
+      for (let i = 0; i < k; i++) {
+        const a = ((k === 1 ? (a0 + a1) / 2 : a0 + ((a1 - a0) * i) / (k - 1)) * Math.PI) / 180;
+        const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
+        gEdges.append(svgEl("line", { x1: cx, y1: cy, x2: x, y2: y, class: "g-leaf-edge" }));
+        gLeaves.append(svgEl("circle", { cx: x, cy: y, r: 4.5, class: "g-leaf" }));
+      }
+    };
+    GTYPES.forEach((t) => {
+      const x = L.types[t.key][0], y = L.types[t.key][1];
+      const c = n(t.stat), r = rad(c);
+      gEdges.append(svgEl("line", { x1: hx, y1: hy, x2: x, y2: y, class: "g-edge" }));
+      const out = (Math.atan2(y - hy, x - hx) * 180) / Math.PI;
+      fan(x, y, c, out - 55, out + 55, r + 24);
+      gNodes.append(svgEl("circle", { cx: x, cy: y, r: r, class: "g-type g-" + t.key + (c ? "" : " g-zero") }));
+      gText.append(svgEl("text", { x: x, y: y + 4, class: "g-count" }, fmt(c)));
+      gText.append(svgEl("text", { x: x, y: y < hy ? y + r + 18 : y - r - 10, class: "g-label" }, t.label));
+      gText.append(svgEl("text", { x: (x + hx) / 2, y: (y + hy) / 2 - 8, class: "g-edge-label" }, t.edge));
+    });
+    const procs = n("processes"), hr = rad(procs) + 4;
+    fan(hx, hy, Math.max(0, procs - 1), L.leafArc[0], L.leafArc[1], L.leafR);
+    gNodes.append(svgEl("circle", { cx: hx, cy: hy, r: hr, class: "g-hub" }));
+    gText.append(svgEl("text", { x: hx, y: hy + 4, class: "g-count g-hub-count" }, fmt(procs)));
+    gText.append(svgEl("text", { x: hx, y: hy + hr + 20, class: "g-label" }, "Processes"));
+    gText.append(svgEl("text", { x: L.spawnLabel[0], y: L.spawnLabel[1], class: "g-edge-label" }, "Spawns"));
+    svg.append(gEdges, gLeaves, gNodes, gText);
+    box.replaceChildren(svg);
+  }
+  function watchGraph() {
+    const box = $("[data-graph]");
+    if (!box || !("ResizeObserver" in window)) return;
+    new ResizeObserver(() => {
+      if (!graphStats) return;
+      const name = box.clientWidth < 560 ? "narrow" : "wide";
+      if (name !== graphLayout) renderGraph(graphStats);
+    }).observe(box);
+  }
+
+  const results = () => $("[data-results]");
+  async function show(d, source, { scroll = false } = {}) {
+    const res = results();
+    const wasVisible = !res.hidden;
+    if (scroll && currentView !== "analyze") history.pushState(null, "", "#analyze"), route(false);
+    if (wasVisible && !reduceMotion()) { res.classList.add("is-swapping"); await sleep(120); }
+    renderReport(d, source);
+    res.hidden = false;
+    res.classList.remove("is-swapping");
+    if (scroll) res.scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" });
+  }
+
+  /* ---------- Status line ---------- */
+  const statusEl = () => $("[data-analyze-status]");
+  function status(msg, tone) {
+    const s = statusEl();
+    if (!s) return;
+    s.textContent = msg;
+    if (tone) s.dataset.tone = tone; else delete s.dataset.tone;
+  }
+  const elapsedEl = () => $("[data-elapsed]");
+
+  /* ---------- Demos ---------- */
+  let demoToken = 0;
+  async function loadDemo(id, { scroll = true } = {}) {
+    const name = DEMO_FAMILY[id] || "Sample";
+    const token = ++demoToken;
+    $$("[data-demo]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.demo === String(id))));
+    const btn = $(`[data-demo="${id}"]`);
+    if (btn) btn.setAttribute("aria-busy", "true");
+    if (!busy) status(`Loading the ${name} report.`);
+    try {
+      const r = await fetch("./demo_" + id + ".json");
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const d = await r.json();
+      if (token !== demoToken) return;
+      await show(d, { kind: "Family", name, task: id }, { scroll });
+      if (!busy) status(`Showing the pre-analyzed report for ${name}, task ${id}.`);
+    } catch (e) {
+      if (token !== demoToken) return;
+      status(`Could not load the ${name} report (${e.message}). Open the page over http(s), not as a local file.`, "error");
+    } finally {
+      if (btn) btn.removeAttribute("aria-busy");
+    }
+  }
+
+  /* ---------- Progress stepper (driven by the real submit / poll states) ---------- */
+  const STEP_ICONS = ["upload", "box", "waypoints", "layers", "sparkles"];
+  const STEP_SR = { done: ", done", active: ", in progress", error: ", failed", todo: "" };
+  let currentStep = -1;
+  function setStep(active, failed = false) {
+    const ol = $("[data-stepper]");
+    if (!ol) return;
+    currentStep = active;
+    ol.hidden = active < 0;
+    $$("li", ol).forEach((li, i) => {
+      const state = failed && i === active ? "error" : i < active ? "done" : i === active ? "active" : "todo";
+      li.dataset.state = state;
+      if (state === "active") li.setAttribute("aria-current", "step"); else li.removeAttribute("aria-current");
+      li.querySelector(".st-sr").textContent = STEP_SR[state];
+      const ic = state === "done" ? "check" : state === "error" ? "x" : state === "active" ? "loader-circle" : STEP_ICONS[i];
+      li.querySelector(".st-dot use").setAttribute("href", "#i-" + ic);
+    });
+  }
+
+  /* ---------- Upload, submit, poll ---------- */
+  let file = null, busy = false, pollTimer = null;
+  const LABELS = { idle: "Analyze sample", ready: "Analyze sample", submitting: "Submitting", analyzing: "Analyzing", done: "Report ready" };
+  const ICONS = { idle: "arrow-right", ready: "arrow-right", submitting: "loader-circle", analyzing: "loader-circle", done: "check" };
+  function setState(s) {
+    const btn = $("[data-analyze]");
+    btn.dataset.state = s;
+    btn.disabled = s !== "ready" && s !== "done";
+    btn.setAttribute("aria-busy", String(s === "submitting" || s === "analyzing"));
+    btn.querySelector(".btn-label").textContent = LABELS[s];
+    btn.querySelector(".btn-icon use").setAttribute("href", "#i-" + ICONS[s]);
+  }
+  function setFile(f) {
+    if (!f) return;
+    file = f;
+    $("[data-filename]").textContent = `${f.name}, ${(f.size / 1024).toFixed(1)} KB`;
+    $("[data-drop]").dataset.hasFile = "1";
+    if (!busy) { setState("ready"); status("Ready. Press Analyze sample to submit it to the sandbox."); }
+  }
+  function fail(msg) {
+    clearTimeout(pollTimer);
+    if (currentStep >= 0 && currentStep < 5) setStep(currentStep, true);
+    busy = false;
+    const e = elapsedEl(); if (e) e.textContent = "";
+    setState(file ? "ready" : "idle");
+    status(msg, "error");
+  }
+  const mmss = (ms) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+
+  async function submit() {
+    if (!file || busy) return;
+    busy = true;
+    setState("submitting");
+    setStep(0);
+    status(`Uploading ${file.name} to the sandbox.`);
+    const fd = new FormData();
+    fd.append("file", file);
+    let sd;
+    try {
+      const r = await fetch(base + "/submit", { method: "POST", body: fd, headers: HDR });
+      sd = await r.json();
+    } catch (e) {
+      fail(`Could not reach the analysis backend (${e.message}). It may be offline; the example reports still work.`);
+      return;
+    }
+    if (sd && sd.error) { fail("The backend rejected the sample: " + sd.error); return; }
+    if (!sd || sd.task_id == null) { fail("The backend did not return a task id."); return; }
+    poll(sd.task_id, file.name);
+  }
+
+  function poll(taskId, name) {
+    setState("analyzing");
+    setStep(1);
+    status(`Task ${taskId} is running in the sandbox. This usually takes a few minutes.`);
+    const t0 = Date.now();
+    let errors = 0;
+    const tick = async () => {
+      const e = elapsedEl(); if (e) e.textContent = mmss(Date.now() - t0) + " elapsed";
+      try {
+        const r = await fetch(`${base}/task/${taskId}/status`, { headers: HDR });
+        const d = await r.json();
+        errors = 0;
+        if (d.status === "reported") {
+          status(`Task ${taskId} finished. Building the graph, classifying, and writing the explanation.`);
+          const rr = await fetch(`${base}/task/${taskId}/report`, { headers: HDR });
+          const dd = await rr.json();
+          setStep(3);
+          if (dd && dd.error) { fail("The backend could not build the report: " + dd.error); return; }
+          $$("[data-demo]").forEach((b) => b.setAttribute("aria-pressed", "false"));
+          demoToken++;
+          await show(dd, { kind: "File", name, task: taskId }, { scroll: true });
+          busy = false;
+          if (e) e.textContent = "";
+          setStep(5);
+          setState("done");
+          status(`Report ready for ${name}, task ${taskId}.`);
+          setTimeout(() => { if (!busy) setState(file ? "ready" : "idle"); }, 2400);
+          return;
+        }
+        if (typeof d.status === "string" && d.status.includes("failed")) {
+          fail(`The sandbox reported "${d.status}" for task ${taskId}.`);
+          return;
+        }
+      } catch (err) {
+        if (++errors >= MAX_POLL_ERRORS) { fail(`Lost contact with the backend while polling task ${taskId}.`); return; }
+      }
+      if (Date.now() - t0 > POLL_MAX_MS) { fail(`Task ${taskId} did not finish within 20 minutes.`); return; }
+      pollTimer = setTimeout(tick, POLL_MS);
+    };
+    tick();
+  }
+
+  function initUpload() {
+    const input = $("[data-file]"), drop = $("[data-drop]");
+    input.addEventListener("change", () => setFile(input.files[0]));
+    ["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (ev) => { ev.preventDefault(); drop.classList.add("is-over"); }));
+    ["dragleave", "drop"].forEach((t) => drop.addEventListener(t, () => drop.classList.remove("is-over")));
+    drop.addEventListener("drop", (ev) => { ev.preventDefault(); if (ev.dataTransfer.files[0]) setFile(ev.dataTransfer.files[0]); });
+    $("[data-analyze]").addEventListener("click", submit);
+    setState("idle");
+  }
+
+  /* ---------- Backend health ---------- */
+  async function ping(first) {
+    const pill = $("[data-health]");
+    if (!pill) return;
+    const label = pill.querySelector("[data-health-label]");
+    const set = (state, word) => {
+      pill.dataset.state = state;
+      label.replaceChildren(el("span", "hl-pre", "Backend "), el("span", "hl-word", word));
+    };
+    if (first) set("checking", "checking");
+    try {
+      const ctl = new AbortController();
+      const to = setTimeout(() => ctl.abort(), 6000);
+      const r = await fetch(base + "/health", { headers: HDR, signal: ctl.signal, cache: "no-store" });
+      clearTimeout(to);
+      set(r.ok ? "online" : "offline", r.ok ? "online" : "offline");
+    } catch {
+      set("offline", "offline");
+    }
+  }
+
+  /* ---------- Links ---------- */
+  function initLinks() {
+    $$("[data-repo]").forEach((a) => (a.href = REPO_URL));
+    $$("[data-paper]").forEach((a) => {
+      if (PAPER_URL) { a.href = PAPER_URL; a.target = "_blank"; a.rel = "noopener"; }
+      else a.href = "#cite";
+    });
+  }
+
+  /* ---------- Views: Analyze / About / Help, one at a time, addressed by the URL hash ---------- */
+  const VIEWS = { analyze: "HeteroScan, behavioral malware analysis", about: "About, HeteroScan", help: "Help, HeteroScan" };
+  let currentView = "";
+  function viewFor(id) {
+    if (!id) return "analyze";
+    if (id in VIEWS) return id;
+    const el = document.getElementById(id);
+    const v = el && el.closest("[data-view]");
+    return v ? v.dataset.view : null; // null: target lives outside the views (footer, main), keep the current view
+  }
+  function route(initial) {
+    const id = decodeURIComponent(location.hash.slice(1));
+    const v = viewFor(id);
+    if (v === null) return;
+    const changed = v !== currentView;
+    $$("[data-view]").forEach((s) => (s.hidden = s.dataset.view !== v));
+    $$("[data-nav]").forEach((a) => {
+      if (a.dataset.nav === v) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    });
+    document.title = VIEWS[v];
+    currentView = v;
+    if (initial && !id) return;
+    if (!id || id in VIEWS) {
+      if (changed || !initial) {
+        window.scrollTo({ top: 0, behavior: "instant" });
+        const h = $(`[data-view="${v}"] [data-view-title]`);
+        if (h && !initial) h.focus({ preventScroll: true });
+      }
+    } else {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ block: "start" });
+    }
+  }
+  window.addEventListener("hashchange", () => route(false));
+
+  document.addEventListener("DOMContentLoaded", () => {
+    route(true);
+    initLinks();
+    $$("[data-demo]").forEach((b) => b.addEventListener("click", () => loadDemo(b.dataset.demo)));
+    initUpload();
+    watchGraph();
+    ping(true);
+    setInterval(() => ping(false), 60000);
+    loadDemo(INITIAL_DEMO, { scroll: false });
   });
-}
+})();
 </script>
 </body>
 </html>
