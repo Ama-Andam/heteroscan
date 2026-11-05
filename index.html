@@ -582,7 +582,6 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
   "use strict";
   const HDR = { "ngrok-skip-browser-warning": "true" };
   const DEMO_FAMILY = { 33373: "njRAT", 33184: "AsyncRAT", 33324: "XWorm", 33428: "NanoCore" };
-  const INITIAL_DEMO = 33373;
   const LIMIT = 6;
   const POLL_MS = 5000;
   const POLL_MAX_MS = 20 * 60 * 1000;
@@ -1079,7 +1078,6 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
     watchGraph();
     ping(true);
     setInterval(() => ping(false), 60000);
-    loadDemo(INITIAL_DEMO, { scroll: false });
   });
 })();
 </script>
