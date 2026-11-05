@@ -5,11 +5,12 @@
 <script>
 const API = "https://77fd-134-129-201-10.ngrok-free.app"; // backend base URL: swap this each demo
 const REPO_URL = "https://github.com/Ama-Andam/heteroscan";
-const PAPER_URL = ""; // empty: the Paper link scrolls to the citation in the footer
+const PAPER_URL = "https://arxiv.org/abs/2611.03774"; // empty: the Paper link scrolls to the citation in the footer
+const ALERT_ENDPOINT = ""; // Formspree form URL (https://formspree.io/f/...) that emails you when uploads fail; empty turns alerts off
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>HeteroScan, behavioral malware analysis</title>
+<title>HeteroScan, Behavioral Malware Analysis</title>
 <meta name="description" content="Upload a Windows malware sample or open a pre-analyzed report. HeteroScan runs it in a CAPE sandbox, models its behavior as a heterogeneous graph, classifies it with an ensemble, and explains the verdict with an LLM.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23c9f25a'/%3E%3Cpath d='M9 12V10a1 1 0 0 1 1-1h2M20 9h2a1 1 0 0 1 1 1v2M23 20v2a1 1 0 0 1-1 1h-2M12 23h-2a1 1 0 0 1-1-1v-2' stroke='%23232b10' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%23232b10'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -51,6 +52,8 @@ p,li{text-wrap:pretty}
 .md{min-width:0}
 [data-health]{white-space:nowrap}
 @media (max-width:480px){.hl-pre{display:none}}
+.hl-word{display:inline-block}
+@media (max-width:480px){.hl-word::first-letter{text-transform:uppercase}}
 
 :root{
   --bg:oklch(0.955 0.003 110);
@@ -318,8 +321,28 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
 @media (max-width:480px){.attck li{grid-template-columns:minmax(0,1fr)}}
 .safety{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
 .safety p{color:var(--on-ink-2)}
-.research{margin:18px 0 0;color:var(--on-ink-2);font-size:.9375rem;max-width:70ch}
-.research i{font-style:italic;color:var(--on-ink)}
+.paper-link{display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px 10px;margin-top:18px;min-height:44px;color:var(--on-ink);font:700 .9375rem/1.3 var(--sans);text-underline-offset:4px}
+.paper-link .paper-id{font:500 .8125rem/1.3 var(--mono);color:var(--on-ink-2)}
+.paper-link .i{width:15px;height:15px}
+
+/* outage dialog */
+.modal{border:0;padding:0;margin:auto;width:min(500px,calc(100vw - 32px));max-height:calc(100dvh - 32px);border-radius:var(--r);background:var(--tile);color:var(--text);border:1px solid var(--line);box-shadow:0 8px 8px oklch(0.1 0.01 110 / .12)}
+.modal::backdrop{background:oklch(0.13 0.006 110 / .6)}
+.modal[open]{animation:modal-in .22s var(--ease-out)}
+.modal[open]::backdrop{animation:fade-in .22s var(--ease-out)}
+@keyframes modal-in{from{opacity:0;transform:scale(.96)}}
+@keyframes fade-in{from{opacity:0}}
+.modal-body{padding:clamp(22px,4vw,30px)}
+.modal-ic{display:grid;place-items:center;width:48px;height:48px;border-radius:12px;background:var(--sunk);border:1px solid var(--line);margin-bottom:18px}
+.modal-ic .i{width:24px;height:24px}
+.modal h2{font:750 1.5rem/1.15 var(--display);letter-spacing:-.025em;margin:0 0 10px}
+.modal p{margin:0 0 12px;color:var(--text-2)}
+.modal-note{color:var(--text)!important;font-weight:600}
+.modal-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+.modal-actions .btn{height:46px;padding:0 20px;font-size:.9375rem}
+.btn-ghost{display:inline-flex;align-items:center;height:46px;padding:0 20px;border-radius:999px;border:1px solid var(--line);background:none;font:700 .9375rem/1 var(--display);transition:background-color .15s ease,transform .16s var(--ease-out)}
+.btn-ghost:active{transform:scale(.97)}
+@media (hover:hover) and (pointer:fine){.btn-ghost:hover{background:var(--sunk)}}
 
 /* footer */
 .foot{grid-column:span 12;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:20px 40px;scroll-margin-top:12px}
@@ -361,6 +384,7 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
 <symbol id="i-circle-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
 <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
 <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+<symbol id="i-cloud-off" viewBox="0 0 24 24"><path d="m2 2 20 20"/><path d="M5.782 5.782A7 7 0 0 0 9 19h8.5a4.5 4.5 0 0 0 1.307-.193"/><path d="M21.532 16.5A4.5 4.5 0 0 0 17.5 10h-1.79A7.008 7.008 0 0 0 10 5.07"/></symbol>
 <symbol id="i-terminal" viewBox="0 0 24 24"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></symbol>
 <symbol id="i-external-link" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
 <symbol id="i-layout-dashboard" viewBox="0 0 24 24"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></symbol>
@@ -368,7 +392,7 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
 <symbol id="i-quote" viewBox="0 0 24 24"><path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/></symbol>
 </svg>
 
-<a class="skip" href="#main">Skip to content</a>
+<a class="skip" href="#main">Skip to Content</a>
 <div class="wrap">
   <header class="top">
     <a class="word" href="#main"><span class="mk"><svg class="i" aria-hidden="true"><use href="#i-scan-search"/></svg></span>HeteroScan</a>
@@ -379,37 +403,37 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
       <span class="nav-sep" aria-hidden="true"></span>
       <a class="pill" href="#cite" data-paper aria-label="Paper"><svg class="i" aria-hidden="true"><use href="#i-book-open"/></svg><span>Paper</span></a>
       <a class="pill" href="https://github.com/Ama-Andam/heteroscan" data-repo aria-label="GitHub"><svg class="i" aria-hidden="true"><use href="#i-github"/></svg><span>GitHub</span></a>
-      <span class="pill health" data-health role="status"><span data-health-label><span class="hl-pre">Backend </span><span class="hl-word">checking</span></span></span>
+      <span class="pill health" data-health role="status"><span data-health-label><span class="hl-pre">Backend </span><span class="hl-word">Checking</span></span></span>
     </nav>
   </header>
 
   <main id="main" class="bento">
     <div class="view" data-view="analyze">
     <section class="t t-ink hero" aria-labelledby="hero-h">
-      <p class="lbl"><svg class="i" aria-hidden="true"><use href="#i-scan"/></svg>Behavioral malware analysis</p>
+      <p class="lbl"><svg class="i" aria-hidden="true"><use href="#i-scan"/></svg>Behavioral Malware Analysis</p>
       <h1 id="hero-h" tabindex="-1" data-view-title>Run it. Graph it. Read why.</h1>
       <p><b>HeteroScan</b> detonates a sample in a sandbox, models every action as a typed graph, and explains the verdict in plain language.</p>
     </section>
     <section class="t pipe" aria-labelledby="pipe-h">
       <h2 id="pipe-h" class="lbl">Pipeline</h2>
       <ol class="steps">
-        <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-box"/></svg></span><span><b>CAPE sandbox</b><small>Runs the sample, records behavior</small></span></li>
-        <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-waypoints"/></svg></span><span><b>Heterogeneous graph</b><small>Processes, APIs, files, keys, hosts</small></span></li>
-        <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-layers"/></svg></span><span><b>Ensemble classifier + LLM</b><small>Verdict, then explanation</small></span></li>
+        <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-box"/></svg></span><span><b>CAPE Sandbox</b><small>Runs the sample, records behavior</small></span></li>
+        <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-waypoints"/></svg></span><span><b>Heterogeneous Graph</b><small>Processes, APIs, files, keys, hosts</small></span></li>
+        <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-layers"/></svg></span><span><b>Ensemble Classifier + LLM</b><small>Verdict, then explanation</small></span></li>
       </ol>
     </section>
 
     <section class="t an" id="analyze" aria-labelledby="an-h">
-      <h2 id="an-h">Analyze a sample</h2>
+      <h2 id="an-h">Analyze a Sample</h2>
       <label class="drop" data-drop>
         <input class="file-input" type="file" data-file aria-describedby="drop-hint">
         <svg class="i" aria-hidden="true"><use href="#i-upload"/></svg>
-        <strong>Drop a file, or click to choose</strong>
+        <strong>Drop a File, or Click to Choose</strong>
         <span id="drop-hint">Windows executable (.exe or .dll). A run takes a few minutes.</span>
         <span data-filename></span>
       </label>
       <div class="an-row">
-        <button class="btn" type="button" data-analyze disabled><span class="btn-label">Analyze sample</span><svg class="i btn-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
+        <button class="btn" type="button" data-analyze disabled><span class="btn-label">Analyze Sample</span><svg class="i btn-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
         <div class="status-wrap">
           <p class="status" data-analyze-status role="status" aria-live="polite">Choose a file, or open one of the finished reports.</p>
           <span class="elapsed" data-elapsed aria-hidden="true"></span>
@@ -424,7 +448,7 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
       </ol>
     </section>
     <section class="t demos-t" aria-labelledby="dm-h">
-      <h2 id="dm-h">Or open a finished report</h2>
+      <h2 id="dm-h">Or Open a Finished Report</h2>
       <div class="demos">
         <button type="button" data-demo="33373" aria-pressed="false"><span class="demo-name">njRAT</span><span class="demo-id">Task 33373</span></button>
         <button type="button" data-demo="33184" aria-pressed="false"><span class="demo-name">AsyncRAT</span><span class="demo-id">Task 33184</span></button>
@@ -439,12 +463,12 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
         <div>
           <svg class="i big" data-verdict-icon aria-hidden="true"><use href="#i-shield-alert"/></svg>
           <h2 id="v-h" class="vword" data-f="verdict"></h2>
-          <p class="cape" data-cape hidden>CAPE detection <b data-f="cape"></b></p>
+          <p class="cape" data-cape hidden>CAPE Detection <b data-f="cape"></b></p>
         </div>
         <div class="vfoot"><span><span data-f="source-label">Family</span> <b data-f="source"></b></span><span>Task <b data-f="task"></b></span></div>
       </section>
       <section class="t conf-t" aria-labelledby="c-h">
-        <h3 id="c-h" class="lbl">Ensemble confidence</h3>
+        <h3 id="c-h" class="lbl">Ensemble Confidence</h3>
         <p class="big-num"><span data-f="confidence"></span><small>%</small></p>
         <div class="meter" data-gauge role="meter" aria-labelledby="c-h" aria-valuemin="0" aria-valuemax="100"><span></span></div>
       </section>
@@ -454,17 +478,17 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
       </section>
       <dl class="t stats-t" aria-label="Behavior graph size">
         <div><dt>Processes</dt><dd data-stat="processes"></dd></div>
-        <div><dt>API calls</dt><dd data-stat="api_calls"></dd></div>
+        <div><dt>API Calls</dt><dd data-stat="api_calls"></dd></div>
         <div><dt>Files</dt><dd data-stat="files"></dd></div>
-        <div><dt>Registry keys</dt><dd data-stat="registry_keys"></dd></div>
+        <div><dt>Registry Keys</dt><dd data-stat="registry_keys"></dd></div>
         <div><dt>Connections</dt><dd data-stat="network_connections"></dd></div>
       </dl>
 
       <section class="t graph-t" aria-labelledby="g-h">
         <div class="graph-side">
-          <h3 id="g-h">Behavior graph</h3>
+          <h3 id="g-h">Behavior Graph</h3>
           <p>Every entity type from this run, linked to the processes that touched it. Node size grows with the count. Up to eight neighbors are drawn per type; the number is the full count.</p>
-          <p class="lbl">Edge types</p>
+          <p class="lbl">Edge Types</p>
           <ul class="edge-chips" aria-label="Edge types">
             <li>spawns</li><li>calls</li><li>reads_file</li><li>writes_file</li><li>reads_reg</li><li>writes_reg</li><li>connects</li>
           </ul>
@@ -474,13 +498,13 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
 
       <section class="t ioc-t ioc-tall" aria-labelledby="l-proc"><div class="ioc-h"><h3 id="l-proc"><svg class="i" aria-hidden="true"><use href="#i-cpu"/></svg>Processes</h3><span class="cnt" data-count="processes"></span></div><ul class="ioc-list" data-list="processes"></ul></section>
       <section class="t ioc-t" aria-labelledby="l-net"><div class="ioc-h"><h3 id="l-net"><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg>Network and C2</h3><span class="cnt" data-count="network"></span></div><ul class="ioc-list" data-list="network"></ul></section>
-      <section class="t ioc-t" aria-labelledby="l-file"><div class="ioc-h"><h3 id="l-file"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg>Files written</h3><span class="cnt" data-count="files"></span></div><ul class="ioc-list" data-list="files"></ul></section>
+      <section class="t ioc-t" aria-labelledby="l-file"><div class="ioc-h"><h3 id="l-file"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg>Files Written</h3><span class="cnt" data-count="files"></span></div><ul class="ioc-list" data-list="files"></ul></section>
       <section class="t ioc-t ioc-wide" aria-labelledby="l-reg"><div class="ioc-h"><h3 id="l-reg"><svg class="i" aria-hidden="true"><use href="#i-database"/></svg>Registry</h3><span class="cnt" data-count="registry"></span></div><ul class="ioc-list" data-list="registry"></ul></section>
 
       <section class="t ex-t" aria-labelledby="ex-h">
         <div class="ex-side">
           <h2 id="ex-h">Explanation</h2>
-          <span class="ai"><svg class="i" aria-hidden="true"><use href="#i-sparkles"/></svg>AI-generated</span>
+          <span class="ai"><svg class="i" aria-hidden="true"><use href="#i-sparkles"/></svg>AI-Generated</span>
           <p>A language model wrote this from the sandbox trace. Check it against the indicators.</p>
         </div>
         <article class="md" data-md></article>
@@ -495,38 +519,38 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
       <p>A post-infection behavioral analysis system built for academic research.</p>
     </div>
     <section class="t info-t span-7" aria-labelledby="how-h">
-      <h3 id="how-h"><svg class="i" aria-hidden="true"><use href="#i-scan"/></svg>How it works</h3>
+      <h3 id="how-h"><svg class="i" aria-hidden="true"><use href="#i-scan"/></svg>How It Works</h3>
       <ol class="flow">
-        <li><span><b>Sample upload</b><span>A Windows PE executable is submitted through this page.</span></span></li>
-        <li><span><b>CAPE sandbox</b><span>The sample runs in an isolated Windows 10 virtual machine while CAPE records its processes, API calls, file and registry activity, and network traffic.</span></span></li>
-        <li><span><b>Graph builder</b><span>The trace becomes a heterogeneous graph, with a typed node for each entity and a typed edge for each action.</span></span></li>
-        <li><span><b>Ensemble classifier</b><span>Random Forest, Extra Trees and XGBoost vote on structural features of the graph to produce the verdict and confidence.</span></span></li>
-        <li><span><b>LLM explanation</b><span>A large language model reads the evidence and writes the report shown with each result.</span></span></li>
+        <li><span><b>Sample Upload</b><span>A Windows PE executable is submitted through this page.</span></span></li>
+        <li><span><b>CAPE Sandbox</b><span>The sample runs in an isolated Windows 10 virtual machine while CAPE records its processes, API calls, file and registry activity, and network traffic.</span></span></li>
+        <li><span><b>Graph Builder</b><span>The trace becomes a heterogeneous graph, with a typed node for each entity and a typed edge for each action.</span></span></li>
+        <li><span><b>Ensemble Classifier</b><span>Random Forest, Extra Trees and XGBoost vote on structural features of the graph to produce the verdict and confidence.</span></span></li>
+        <li><span><b>LLM Explanation</b><span>A large language model reads the evidence and writes the report shown with each result.</span></span></li>
       </ol>
     </section>
     <section class="t info-t span-5" aria-labelledby="schema-h">
-      <h3 id="schema-h"><svg class="i" aria-hidden="true"><use href="#i-waypoints"/></svg>Graph node types</h3>
+      <h3 id="schema-h"><svg class="i" aria-hidden="true"><use href="#i-waypoints"/></svg>Graph Node Types</h3>
       <dl class="nodes">
         <div><dt>Process</dt><dd>Each process observed during execution. Spawn edges link parents to children.</dd></div>
-        <div><dt>API call</dt><dd>Windows API functions called by processes, the main behavioral signal.</dd></div>
+        <div><dt>API Call</dt><dd>Windows API functions called by processes, the main behavioral signal.</dd></div>
         <div><dt>File</dt><dd>Files read or written. Persistence often shows up here.</dd></div>
-        <div><dt>Registry key</dt><dd>Keys accessed. Malware commonly writes to Run keys to survive reboots.</dd></div>
+        <div><dt>Registry Key</dt><dd>Keys accessed. Malware commonly writes to Run keys to survive reboots.</dd></div>
         <div><dt>Network</dt><dd>Endpoints contacted, such as C2 servers and exfiltration targets.</dd></div>
       </dl>
       <p>Seven typed edges connect them: spawns, calls, reads_file, writes_file, reads_reg, writes_reg and connects.</p>
     </section>
     <section class="t info-t span-5" aria-labelledby="verdict-h">
-      <h3 id="verdict-h"><svg class="i" aria-hidden="true"><use href="#i-shield-check"/></svg>Reading the verdict</h3>
+      <h3 id="verdict-h"><svg class="i" aria-hidden="true"><use href="#i-shield-check"/></svg>Reading the Verdict</h3>
       <p>The verdict comes from a voting ensemble of Random Forest, Extra Trees and XGBoost classifiers trained on structural features of behavioral graphs. Confidence reflects how strongly the ensemble agrees.</p>
       <p>Because the classifier reads graph structure rather than signatures or file hashes, it can flag new variants that behave like known families.</p>
     </section>
     <section class="t info-t span-7" aria-labelledby="attck-h">
-      <h3 id="attck-h"><svg class="i" aria-hidden="true"><use href="#i-target"/></svg>MITRE ATT&amp;CK techniques it looks for</h3>
+      <h3 id="attck-h"><svg class="i" aria-hidden="true"><use href="#i-target"/></svg>MITRE ATT&amp;CK Techniques It Looks For</h3>
       <ul class="attck">
-        <li><code>T1055</code><span><b>Process injection</b><span>NtProtectVirtualMemory and LdrLoadDll call patterns in the graph.</span></span></li>
-        <li><code>T1547</code><span><b>Boot or logon autostart</b><span>Writes to the HKCU and HKLM Run registry keys.</span></span></li>
-        <li><code>T1059</code><span><b>Command and scripting interpreter</b><span>Spawn edges to cmd.exe and powershell.exe.</span></span></li>
-        <li><code>T1071</code><span><b>Application layer protocol (C2)</b><span>Connections to non-standard ports and unknown hosts.</span></span></li>
+        <li><code>T1055</code><span><b>Process Injection</b><span>NtProtectVirtualMemory and LdrLoadDll call patterns in the graph.</span></span></li>
+        <li><code>T1547</code><span><b>Boot or Logon Autostart</b><span>Writes to the HKCU and HKLM Run registry keys.</span></span></li>
+        <li><code>T1059</code><span><b>Command and Scripting Interpreter</b><span>Spawn edges to cmd.exe and powershell.exe.</span></span></li>
+        <li><code>T1071</code><span><b>Application Layer Protocol (C2)</b><span>Connections to non-standard ports and unknown hosts.</span></span></li>
       </ul>
     </section>
 
@@ -538,18 +562,18 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
       <p>What to do, what to expect, and what not to upload.</p>
     </div>
     <section class="t info-t span-7" aria-labelledby="use-h">
-      <h3 id="use-h"><svg class="i" aria-hidden="true"><use href="#i-circle-help"/></svg>Analyzing a sample</h3>
+      <h3 id="use-h"><svg class="i" aria-hidden="true"><use href="#i-circle-help"/></svg>Analyzing a Sample</h3>
       <ol class="flow">
-        <li><span><b>Add a file</b><span>Drop a Windows executable (.exe or .dll) on the upload area, or click it to choose one.</span></span></li>
-        <li><span><b>Start the run</b><span>Press Analyze sample. The file goes to the CAPE sandbox and runs in an isolated virtual machine.</span></span></li>
-        <li><span><b>Wait for the report</b><span>The progress tracker shows each stage. A run takes a few minutes.</span></span></li>
-        <li><span><b>Review the result</b><span>Read the verdict, the behavior graph, the indicators and the AI-generated explanation.</span></span></li>
+        <li><span><b>Add a File</b><span>Drop a Windows executable (.exe or .dll) on the upload area, or click it to choose one.</span></span></li>
+        <li><span><b>Start the Run</b><span>Press Analyze sample. The file goes to the CAPE sandbox and runs in an isolated virtual machine.</span></span></li>
+        <li><span><b>Wait for the Report</b><span>The progress tracker shows each stage. A run takes a few minutes.</span></span></li>
+        <li><span><b>Review the Result</b><span>Read the verdict, the behavior graph, the indicators and the AI-generated explanation.</span></span></li>
       </ol>
       <p style="margin-top:14px">If the status pill says offline, the sandbox is not running right now. The four finished reports still work.</p>
       <a class="back" href="#analyze"><svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg>Go to Analyze</a>
     </section>
     <section class="t info-t span-5 safety" aria-labelledby="safe-h">
-      <h3 id="safe-h"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg>Safety and privacy</h3>
+      <h3 id="safe-h"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg>Safety and Privacy</h3>
       <p>Samples run in an isolated Windows 10 virtual machine.</p>
       <p>Do not upload files that contain personal or sensitive information.</p>
       <p>Uploaded samples are used only for behavioral analysis and are not shared.</p>
@@ -561,16 +585,29 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
       <div>
         <p class="lbl">Citation</p>
         <p class="cite">E. Andam, E. S. Grant, and N. Kaabouch. What Malware Actually Does: An Empirical Analysis of Post-Infection Behavior Across Malware Families. <i>IEEE</i>, 2026.</p>
-        <p class="research">Part of a master's thesis at the University of North Dakota, <i>Malware Detection and Behavioral Analysis in IoT Environments: A Multi-Study Deep Learning Approach</i>.</p>
+        <a class="paper-link" href="https://arxiv.org/abs/2611.03774" target="_blank" rel="noopener">Read the Paper on arXiv<span class="paper-id">arXiv:2611.03774</span><svg class="i" aria-hidden="true"><use href="#i-external-link"/></svg></a>
       </div>
       <div>
         <p class="lbl">Affiliation</p>
         <p class="aff">AIR Center and School of EECS, University of North Dakota</p>
-        <a class="repo" href="https://github.com/Ama-Andam/heteroscan" data-repo><svg class="i" aria-hidden="true"><use href="#i-github"/></svg>View the repo</a>
+        <a class="repo" href="https://github.com/Ama-Andam/heteroscan" data-repo><svg class="i" aria-hidden="true"><use href="#i-github"/></svg>View the Repo</a>
       </div>
     </footer>
   </main>
 </div>
+<dialog class="modal" data-outage aria-labelledby="outage-h" aria-describedby="outage-d">
+  <div class="modal-body">
+    <div class="modal-ic"><svg class="i" aria-hidden="true"><use href="#i-cloud-off"/></svg></div>
+    <h2 id="outage-h">Live Analysis Is Temporarily Unavailable</h2>
+    <p id="outage-d">The analysis server is not responding, so new samples can't be processed right now. This usually means the sandbox host is offline or under maintenance.</p>
+    <p class="modal-note" data-outage-note role="status" hidden></p>
+    <p>In the meantime, you can still explore the four pre-analyzed reports.</p>
+    <div class="modal-actions">
+      <button class="btn" type="button" data-outage-demos><span>View a Finished Report</span><svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
+      <button class="btn-ghost" type="button" data-outage-close>Close</button>
+    </div>
+  </div>
+</dialog>
 <script>/* HeteroScan front end.
    Backend contract: POST {API}/submit (FormData "file") -> {task_id} | {error}
                      GET  {API}/task/{id}/status -> {status}, done when status === "reported"
@@ -719,13 +756,13 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
       btn.dataset.for = key;
       btn.setAttribute("aria-controls", ul.id);
       btn.setAttribute("aria-expanded", "false");
-      const label = el("span", "more-label", `+${items.length - LIMIT} more`);
+      const label = el("span", "more-label", `+${items.length - LIMIT} More`);
       btn.append(label, icon("chevron-down", "more-chev"));
       btn.addEventListener("click", () => {
         const open = btn.getAttribute("aria-expanded") !== "true";
         btn.setAttribute("aria-expanded", String(open));
         Array.from(ul.children).forEach((li, idx) => { if (idx >= LIMIT) li.hidden = !open; });
-        label.textContent = open ? "Show fewer" : `+${items.length - LIMIT} more`;
+        label.textContent = open ? "Show Fewer" : `+${items.length - LIMIT} More`;
       });
       ul.after(btn);
     }
@@ -742,7 +779,7 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
       u.setAttribute("href", v === "malicious" ? "#i-shield-alert" : v === "benign" ? "#i-shield-check" : "#i-scan"));
     setText("verdict", verdict.charAt(0) + verdict.slice(1).toLowerCase());
     setText("confidence", conf.toFixed(1));
-    setText("classifier", d.classifier || "Unknown classifier");
+    setText("classifier", d.classifier || "Unknown Classifier");
     setText("source-label", source.kind);
     setText("source", source.name);
     setText("task", String(d.task_id ?? source.task ?? ""));
@@ -778,9 +815,9 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
       types: { api: [78, 72], files: [282, 72], registry: [78, 352], network: [282, 352] } },
   };
   const GTYPES = [
-    { key: "api", stat: "api_calls", label: "API calls", edge: "Calls" },
-    { key: "files", stat: "files", label: "Files", edge: "Reads, writes" },
-    { key: "registry", stat: "registry_keys", label: "Registry keys", edge: "Reads, writes" },
+    { key: "api", stat: "api_calls", label: "API Calls", edge: "Calls" },
+    { key: "files", stat: "files", label: "Files", edge: "Reads, Writes" },
+    { key: "registry", stat: "registry_keys", label: "Registry Keys", edge: "Reads, Writes" },
     { key: "network", stat: "network_connections", label: "Network", edge: "Connects" },
   ];
   let graphStats = null, graphLayout = "";
@@ -905,7 +942,7 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
 
   /* ---------- Upload, submit, poll ---------- */
   let file = null, busy = false, pollTimer = null;
-  const LABELS = { idle: "Analyze sample", ready: "Analyze sample", submitting: "Submitting", analyzing: "Analyzing", done: "Report ready" };
+  const LABELS = { idle: "Analyze Sample", ready: "Analyze Sample", submitting: "Submitting", analyzing: "Analyzing", done: "Report Ready" };
   const ICONS = { idle: "arrow-right", ready: "arrow-right", submitting: "loader-circle", analyzing: "loader-circle", done: "check" };
   function setState(s) {
     const btn = $("[data-analyze]");
@@ -937,15 +974,20 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
     busy = true;
     setState("submitting");
     setStep(0);
+    status("Checking that the analysis server is available.");
+    const h = await checkHealth(5000);
+    if (!h.ok) { outage("health", h.detail); return; }
+    setHealth("online");
     status(`Uploading ${file.name} to the sandbox.`);
     const fd = new FormData();
     fd.append("file", file);
     let sd;
     try {
       const r = await fetch(base + "/submit", { method: "POST", body: fd, headers: HDR });
+      if (r.status >= 500) { outage("submit", "POST /submit returned HTTP " + r.status); return; }
       sd = await r.json();
     } catch (e) {
-      fail(`Could not reach the analysis backend (${e.message}). It may be offline; the example reports still work.`);
+      outage("submit", "POST /submit failed: " + e.message);
       return;
     }
     if (sd && sd.error) { fail("The backend rejected the sample: " + sd.error); return; }
@@ -963,6 +1005,7 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
       const e = elapsedEl(); if (e) e.textContent = mmss(Date.now() - t0) + " elapsed";
       try {
         const r = await fetch(`${base}/task/${taskId}/status`, { headers: HDR });
+        if (!r.ok) throw new Error(`GET /task/${taskId}/status returned HTTP ${r.status}`);
         const d = await r.json();
         errors = 0;
         if (d.status === "reported") {
@@ -987,9 +1030,12 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
           return;
         }
       } catch (err) {
-        if (++errors >= MAX_POLL_ERRORS) { fail(`Lost contact with the backend while polling task ${taskId}.`); return; }
+        if (++errors >= MAX_POLL_ERRORS) {
+          outage("poll", `${MAX_POLL_ERRORS} failed requests in a row while polling task ${taskId}. Last error: ${err.message}`, { task_id: taskId });
+          return;
+        }
       }
-      if (Date.now() - t0 > POLL_MAX_MS) { fail(`Task ${taskId} did not finish within 20 minutes.`); return; }
+      if (Date.now() - t0 > POLL_MAX_MS) { outage("timeout", `Task ${taskId} was not reported within 20 minutes.`, { task_id: taskId }); return; }
       pollTimer = setTimeout(tick, POLL_MS);
     };
     tick();
@@ -1006,24 +1052,100 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
   }
 
   /* ---------- Backend health ---------- */
-  async function ping(first) {
+  function setHealth(state) {
     const pill = $("[data-health]");
     if (!pill) return;
-    const label = pill.querySelector("[data-health-label]");
-    const set = (state, word) => {
-      pill.dataset.state = state;
-      label.replaceChildren(el("span", "hl-pre", "Backend "), el("span", "hl-word", word));
-    };
-    if (first) set("checking", "checking");
+    pill.dataset.state = state;
+    pill.querySelector("[data-health-label]").replaceChildren(el("span", "hl-pre", "Backend "), el("span", "hl-word", state.charAt(0).toUpperCase() + state.slice(1)));
+  }
+  async function checkHealth(timeoutMs = 6000) {
     try {
       const ctl = new AbortController();
-      const to = setTimeout(() => ctl.abort(), 6000);
+      const to = setTimeout(() => ctl.abort(), timeoutMs);
       const r = await fetch(base + "/health", { headers: HDR, signal: ctl.signal, cache: "no-store" });
       clearTimeout(to);
-      set(r.ok ? "online" : "offline", r.ok ? "online" : "offline");
-    } catch {
-      set("offline", "offline");
+      return { ok: r.ok, detail: r.ok ? "" : "GET /health returned HTTP " + r.status };
+    } catch (e) {
+      return { ok: false, detail: "GET /health failed: " + (e.name === "AbortError" ? "no response within " + timeoutMs / 1000 + " s" : e.message) };
     }
+  }
+  async function ping(first) {
+    if (first) setHealth("checking");
+    const h = await checkHealth();
+    setHealth(h.ok ? "online" : "offline");
+  }
+
+  /* ---------- Outage handling: owner email alert + visitor dialog ---------- */
+  const ALERT_COOLDOWN_MS = 30 * 60 * 1000; // at most one alert per kind per browser every 30 minutes
+  const OUTAGE = {
+    health: { subject: "backend unreachable before upload", status: "The analysis server is offline, so the upload was not sent." },
+    submit: { subject: "upload request failed", status: "The upload could not reach the analysis server." },
+    poll: { subject: "lost contact while polling a task", status: "The analysis server stopped responding during the run." },
+    timeout: { subject: "task did not finish in time", status: "The analysis did not finish within 20 minutes." },
+  };
+  async function sendAlert(kind, detail, extra) {
+    const endpoint = typeof ALERT_ENDPOINT === "string" ? ALERT_ENDPOINT.trim() : "";
+    if (!endpoint) return "off";
+    const key = "heteroscan-alert-" + kind;
+    try { if (Date.now() - Number(localStorage.getItem(key) || 0) < ALERT_COOLDOWN_MS) return "recent"; } catch {}
+    const payload = Object.assign({
+      _subject: "HeteroScan alert: " + OUTAGE[kind].subject,
+      event: kind,
+      details: detail,
+      time_utc: new Date().toISOString(),
+      page: location.href,
+      backend_url: base,
+      sample: file ? file.name + " (" + (file.size / 1024).toFixed(1) + " KB)" : "none",
+      browser: navigator.userAgent,
+    }, extra || {});
+    try {
+      const r = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(payload),
+        keepalive: true,
+      });
+      if (!r.ok) return "failed";
+      try { localStorage.setItem(key, String(Date.now())); } catch {}
+      return "sent";
+    } catch {
+      return "failed";
+    }
+  }
+  function openOutageDialog() {
+    const d = $("[data-outage]");
+    if (!d) return;
+    const note = $("[data-outage-note]", d);
+    note.textContent = "";
+    note.hidden = true;
+    if (!d.open) d.showModal();
+  }
+  function setOutageNote(result) {
+    const note = $("[data-outage-note]");
+    if (!note) return;
+    note.textContent = result === "sent" || result === "recent"
+      ? "The site owner has been notified automatically. Please try again later."
+      : "Please try your upload again later.";
+    note.hidden = false;
+  }
+  async function outage(kind, detail, extra) {
+    fail(OUTAGE[kind].status + " You can still open the finished reports.");
+    setHealth("offline");
+    openOutageDialog();
+    setOutageNote(await sendAlert(kind, detail, extra));
+  }
+  function initOutageDialog() {
+    const d = $("[data-outage]");
+    if (!d) return;
+    $("[data-outage-close]", d).addEventListener("click", () => d.close());
+    $("[data-outage-demos]", d).addEventListener("click", () => {
+      d.close();
+      const first = $("[data-demo]");
+      const tile = first && first.closest("section");
+      if (tile) tile.scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "center" });
+      if (first) first.focus({ preventScroll: true });
+    });
+    d.addEventListener("click", (e) => { if (e.target === d) d.close(); }); // click on the backdrop closes it
   }
 
   /* ---------- Links ---------- */
@@ -1036,7 +1158,7 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
   }
 
   /* ---------- Views: Analyze / About / Help, one at a time, addressed by the URL hash ---------- */
-  const VIEWS = { analyze: "HeteroScan, behavioral malware analysis", about: "About, HeteroScan", help: "Help, HeteroScan" };
+  const VIEWS = { analyze: "HeteroScan, Behavioral Malware Analysis", about: "About, HeteroScan", help: "Help, HeteroScan" };
   let currentView = "";
   function viewFor(id) {
     if (!id) return "analyze";
@@ -1075,6 +1197,7 @@ h2{font:700 1.5rem/1.1 var(--display);letter-spacing:-.025em;margin:0 0 16px}
     initLinks();
     $$("[data-demo]").forEach((b) => b.addEventListener("click", () => loadDemo(b.dataset.demo)));
     initUpload();
+    initOutageDialog();
     watchGraph();
     ping(true);
     setInterval(() => ping(false), 60000);
